@@ -123,6 +123,12 @@ func (s *lockFreeSlice) Load(index int) interface{} {
 	return s.arrays[index1d][index2d].Load()
 }
 
+// UpdateAt 更新下标位置上的元素。
+func (s *lockFreeSlice) UpdateAt(index int, p interface{}) {
+	index1d, index2d := slicesPostion(index)
+	s.arrays[index1d][index2d].Store(p)
+}
+
 // Range 遍历。
 func (s *lockFreeSlice) Range(f func(index int, p interface{}) (stopIteration bool)) {
 	var index int
@@ -220,4 +226,13 @@ func (slice *Slice) Length() int {
 		return 0
 	}
 	return store.Length()
+}
+
+// UpdateAt 更新下标位置上的值。
+func (slice *Slice) UpdateAt(index int, p interface{}) {
+	store, _ := slice.store.Load().(*lockFreeSlice)
+	if store == nil {
+		panic("empty slice")
+	}
+	store.UpdateAt(index, p)
 }

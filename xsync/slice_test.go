@@ -112,3 +112,66 @@ func TestSlice_Range(t *testing.T) {
 		return false
 	})
 }
+
+func TestSlice_UpdateAt(t *testing.T) {
+	var slice Slice
+
+	for i := 0; i < 10240; i++ {
+		slice.Append(i)
+	}
+
+	for i := 0; i < 10240; i++ {
+		slice.UpdateAt(i, i*2)
+	}
+
+	length := slice.Length()
+	if length != 10240 {
+		t.Fatalf("want length: %d, got length: %d", 10240, length)
+	}
+
+	for i := 0; i < 10240; i++ {
+		num, _ := slice.Load(i).(int)
+		if num != i*2 {
+			t.Fatalf("want %d, got %d", i*2, num)
+		}
+	}
+}
+
+func TestSlice_ConcurrentlyUpdateAt(t *testing.T) {
+	var slice Slice
+
+	for i := 0; i < 1500; i++ {
+		slice.Append(i)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(500)
+	letGo := make(chan int)
+	for i := 0; i < 500; i++ {
+		go func() {
+			defer wg.Done()
+
+			<-letGo
+
+			// 每个位置并发更新100次
+			for j := 0; j < 1500; j++ {
+				for k := 1; k <= 50; k++ {
+					slice.UpdateAt(j, j*k)
+				}
+			}
+		}()
+	}
+
+	time.Sleep(time.Millisecond * 200)
+	close(letGo)
+
+	wg.Wait()
+
+	// 检查
+	for i := 0; i < 1500; i++ {
+		num, _ := slice.Load(i).(int)
+		if num != i*50 {
+			t.Fatalf("want %d, got %d", i*100, num)
+		}
+	}
+}
