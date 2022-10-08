@@ -58,7 +58,7 @@ func (s *lockFreeSlice) Grow() *lockFreeSlice {
 	newSlice := &lockFreeSlice{
 		arrays:   make([][]atomic.Value, len(s.arrays)),
 		capacity: s.capacity + len(tail),
-		length:   s.length,
+		length:   atomic.LoadUint64(&s.length),
 	}
 	copy(newSlice.arrays, s.arrays)
 	newSlice.arrays = append(newSlice.arrays, tail)
@@ -134,7 +134,7 @@ func (s *lockFreeSlice) Range(f func(index int, p interface{}) (stopIteration bo
 	var index int
 	for _, array := range s.arrays {
 		for _, value := range array {
-			if index >= int(s.length) {
+			if index >= int(atomic.LoadUint64(&s.length)) {
 				return
 			}
 
@@ -151,7 +151,7 @@ func (s *lockFreeSlice) Range(f func(index int, p interface{}) (stopIteration bo
 
 // Length 返回长度。
 func (s *lockFreeSlice) Length() int {
-	return int(s.length)
+	return int(atomic.LoadUint64(&s.length))
 }
 
 // Slice 并发安全的Slice结构。

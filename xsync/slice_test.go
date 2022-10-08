@@ -140,22 +140,22 @@ func TestSlice_UpdateAt(t *testing.T) {
 func TestSlice_ConcurrentlyUpdateAt(t *testing.T) {
 	var slice Slice
 
-	for i := 0; i < 1500; i++ {
+	for i := 0; i < 2000; i++ {
 		slice.Append(i)
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(500)
+	wg.Add(1000)
 	letGo := make(chan int)
-	for i := 0; i < 500; i++ {
+	for i := 0; i < 1000; i++ {
 		go func() {
 			defer wg.Done()
 
 			<-letGo
 
 			// 每个位置并发更新100次
-			for j := 0; j < 1500; j++ {
-				for k := 1; k <= 50; k++ {
+			for j := 0; j < 2000; j++ {
+				for k := 1; k <= 100; k++ {
 					slice.UpdateAt(j, j*k)
 				}
 			}
@@ -168,9 +168,9 @@ func TestSlice_ConcurrentlyUpdateAt(t *testing.T) {
 	wg.Wait()
 
 	// 检查
-	for i := 0; i < 1500; i++ {
+	for i := 0; i < 2000; i++ {
 		num, _ := slice.Load(i).(int)
-		if num != i*50 {
+		if num != i*100 {
 			t.Fatalf("want %d, got %d", i*100, num)
 		}
 	}
@@ -201,8 +201,7 @@ func TestSlice_ConcurrentlyAppendAndUpdateAt(t *testing.T) {
 
 				// 更新其它的goroutine的数据一次
 				index = <-indexChann
-				num, _ := slice.Load(index).(int)
-				slice.UpdateAt(index, num*5)
+				slice.UpdateAt(index, index*10)
 			}
 		}()
 	}
