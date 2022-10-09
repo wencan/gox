@@ -34,6 +34,22 @@ func BenchmarkMutexSlice_Append(b *testing.B) {
 	})
 }
 
+func BenchmarkRWMutexSlice_Append(b *testing.B) {
+	var slice []int
+	var mu sync.RWMutex
+
+	b.RunParallel(func(p *testing.PB) {
+		var i int
+		for p.Next() {
+			mu.Lock()
+			slice = append(slice, i)
+			mu.Unlock()
+
+			i++
+		}
+	})
+}
+
 func BenchmarkSlice_Load(b *testing.B) {
 	var slice Slice
 
@@ -72,6 +88,29 @@ func BenchmarkMutexSlice_Load(b *testing.B) {
 			mu.Lock()
 			_ = slice[i]
 			mu.Unlock()
+			i++
+		}
+	})
+}
+
+func BenchmarkRWMutexSlice_Load(b *testing.B) {
+	var slice []int
+	var mu sync.RWMutex
+
+	for i := 0; i < 10000; i++ {
+		slice = append(slice, i)
+	}
+
+	b.ResetTimer()
+	b.RunParallel(func(p *testing.PB) {
+		var i int
+		for p.Next() {
+			if i >= 10000 {
+				i = 0
+			}
+			mu.RLock()
+			_ = slice[i]
+			mu.RUnlock()
 			i++
 		}
 	})
