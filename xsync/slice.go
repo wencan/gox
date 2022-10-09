@@ -174,7 +174,7 @@ type Slice struct {
 	// mux 锁。
 	mu sync.Mutex
 
-	// store 实质存储数据。内部结构为*slice。
+	// store 实质存储数据。内部结构为*lockFreeSlice。
 	// slice增长时，需要加锁。
 	store atomic.Value
 }
