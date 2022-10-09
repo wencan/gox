@@ -10,19 +10,20 @@ import (
 func TestSlice_Append(t *testing.T) {
 	var slice Slice
 
-	for i := 0; i < 10240; i++ {
+	for i := 0; i < 102400; i++ {
 		index := slice.Append(i)
 		if index != i {
 			t.Fatalf("want index: %d, got index: %d", i, index)
 		}
-
-		if got, _ := slice.Load(index).(int); got != i {
-			t.Fatalf("want value: %d, got value: %d", i, got)
-		}
 	}
 	length := slice.Length()
-	if length != 10240 {
-		t.Fatalf("want length: %d, got length: %d", 10240, length)
+	if length != 102400 {
+		t.Fatalf("want length: %d, got length: %d", 102400, length)
+	}
+	for i := 0; i < 102400; i++ {
+		if got, _ := slice.Load(i).(int); got != i {
+			t.Fatalf("want value: %d, got value: %d", i, got)
+		}
 	}
 
 	index1 := slice.Append("1")
@@ -45,9 +46,9 @@ func TestSlice_ConcurrentlyAppend(t *testing.T) {
 	var slice Slice
 
 	var wg sync.WaitGroup
-	wg.Add(1000)
+	wg.Add(500)
 	letGo := make(chan int)
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 500; i++ {
 		go func() {
 			defer wg.Done()
 
@@ -55,7 +56,7 @@ func TestSlice_ConcurrentlyAppend(t *testing.T) {
 
 			<-letGo
 
-			for j := 0; j < 1000; j++ {
+			for j := 0; j < 10000; j++ {
 				num := r.Int()
 				index := slice.Append(num)
 				p := slice.Load(index)
@@ -77,8 +78,8 @@ func TestSlice_ConcurrentlyAppend(t *testing.T) {
 	wg.Wait()
 
 	length := slice.Length()
-	if length != 1000*1000 {
-		t.Fatalf("want length: %d, got length: %d", 1000*1000, length)
+	if length != 500*10000 {
+		t.Errorf("want length: %d, got length: %d", 500*10000, length)
 	}
 }
 
@@ -145,9 +146,9 @@ func TestSlice_ConcurrentlyUpdateAt(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1000)
+	wg.Add(500)
 	letGo := make(chan int)
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 500; i++ {
 		go func() {
 			defer wg.Done()
 
@@ -180,16 +181,16 @@ func TestSlice_ConcurrentlyAppendAndUpdateAt(t *testing.T) {
 	var slice Slice
 
 	var wg sync.WaitGroup
-	wg.Add(1000)
+	wg.Add(500)
 	letGo := make(chan int)
 	indexChann := make(chan int, 1000000)
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 500; i++ {
 		go func() {
 			defer wg.Done()
 
 			<-letGo
 
-			for j := 0; j < 1000; j++ {
+			for j := 0; j < 10000; j++ {
 				// 随便塞个数据
 				index := slice.Append(j)
 
@@ -201,7 +202,8 @@ func TestSlice_ConcurrentlyAppendAndUpdateAt(t *testing.T) {
 
 				// 更新其它的goroutine的数据一次
 				index = <-indexChann
-				slice.UpdateAt(index, index*10)
+				num, _ := slice.Load(index).(int)
+				slice.UpdateAt(index, num*5)
 			}
 		}()
 	}
@@ -212,10 +214,14 @@ func TestSlice_ConcurrentlyAppendAndUpdateAt(t *testing.T) {
 	wg.Wait()
 
 	// 检查
+	length := slice.Length()
+	if length != 500*10000 {
+		t.Errorf("want length: %d, got length: %d", 500*10000, length)
+	}
 	slice.Range(func(index int, p interface{}) (stopIteration bool) {
 		num, _ := p.(int)
 		if num != index*10 {
-			t.Fatalf("want %d, got %d", index*10, num)
+			t.Errorf("want %d, got %d", index*10, num)
 			return true
 		}
 		return false

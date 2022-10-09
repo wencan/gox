@@ -8,13 +8,16 @@ import (
 // lockFreeSlice 无锁slice实现。
 // 增加容量时，通过grow函数创建一个新的lockFreeSlice对象。
 type lockFreeSlice struct {
+	// arrays 存放数据的二维切片，第二维由数组转换来。lockFreeSlice对象的arrays数据不变，变的是atomic.Value内的值。
+	// grow时，创建一个新的arrays，拷贝原arrays，追加新数组。
 	arrays [][]atomic.Value
 
 	// capacity 总容量。
+	// lockFreeSlice对象内的容量不会发生变化。
 	capacity int
 
-	// length 实际占用的总长度。
-	length uint64
+	// length 实际占用的总长度，标示新追加元素的位置。
+	length *uint64
 }
 
 // Grow 返回一个新的容量更大的slice对象，新slice对象会拥有原数组和新数组。
@@ -58,7 +61,7 @@ func (s *lockFreeSlice) Grow() *lockFreeSlice {
 	newSlice := &lockFreeSlice{
 		arrays:   make([][]atomic.Value, len(s.arrays)),
 		capacity: s.capacity + len(tail),
-		length:   atomic.LoadUint64(&s.length),
+		length:   s.length,
 	}
 	copy(newSlice.arrays, s.arrays)
 	newSlice.arrays = append(newSlice.arrays, tail)
@@ -103,13 +106,18 @@ func slicesPostion(index int) (int, int) {
 // 如果成功，返回下标。
 // 如果失败，表示该grow了。
 func (s *lockFreeSlice) Append(p interface{}) (int, bool) {
+	if s.length == nil {
+		// 还没初始化
+		return 0, false
+	}
+
 	for {
-		index := atomic.LoadUint64(&s.length)
+		index := atomic.LoadUint64(s.length)
 		if index+1 > uint64(s.capacity) {
 			return 0, false
 		}
 
-		if atomic.CompareAndSwapUint64(&s.length, index, index+1) {
+		if atomic.CompareAndSwapUint64(s.length, index, index+1) {
 			index1d, index2d := slicesPostion(int(index))
 			s.arrays[index1d][index2d].Store(p)
 			return int(index), true
@@ -131,10 +139,14 @@ func (s *lockFreeSlice) UpdateAt(index int, p interface{}) {
 
 // Range 遍历。
 func (s *lockFreeSlice) Range(f func(index int, p interface{}) (stopIteration bool)) {
+	if s.length == nil {
+		return
+	}
+
 	var index int
 	for _, array := range s.arrays {
 		for _, value := range array {
-			if index >= int(atomic.LoadUint64(&s.length)) {
+			if index >= int(atomic.LoadUint64(s.length)) {
 				return
 			}
 
@@ -151,7 +163,10 @@ func (s *lockFreeSlice) Range(f func(index int, p interface{}) (stopIteration bo
 
 // Length 返回长度。
 func (s *lockFreeSlice) Length() int {
-	return int(atomic.LoadUint64(&s.length))
+	if s.length == nil {
+		return 0
+	}
+	return int(atomic.LoadUint64(s.length))
 }
 
 // Slice 并发安全的Slice结构。
@@ -180,7 +195,8 @@ func (slice *Slice) Append(p interface{}) int {
 		// 初始化
 		store, _ = slice.store.Load().(*lockFreeSlice)
 		if store == nil {
-			store = &lockFreeSlice{}
+			var length uint64
+			store = &lockFreeSlice{length: &length}
 			slice.store.Store(store)
 		}
 	} else {
