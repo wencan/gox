@@ -20,7 +20,7 @@ type lockFreeSlice struct {
 	length *uint64
 }
 
-// Grow 返回一个新的容量更大的slice对象，新slice对象会拥有原数组和新数组。
+// Grow 返回一个新的容量更大的lockFreeSlice对象，新lockFreeSlice对象会拥有原数组和新数组。
 func (s *lockFreeSlice) Grow() *lockFreeSlice {
 	// 最后一个数组的容量
 	var lastCapacity int
@@ -200,9 +200,12 @@ func (slice *Slice) Append(p interface{}) int {
 			slice.store.Store(store)
 		}
 	} else {
+		previous := store
 		store = slice.store.Load().(*lockFreeSlice)
-		if index, ok := store.Append(p); ok {
-			return index
+		if store != previous {
+			if index, ok := store.Append(p); ok {
+				return index
+			}
 		}
 	}
 
