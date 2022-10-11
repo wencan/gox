@@ -17,6 +17,6 @@ Go语言（非官方）基础库。
         <td rowspan="2">xsync</td><td>Slice</td><td>并发安全的Slice结构</td><td>与官方slice+mutex相比，写性能相当，读性能提升不少</td>
     </tr>
     <tr>
-        <td>LRUMap</td><td>并发安全的LRU结构</td><td>与GroupCache的LRU相比，写性能相当，读性能提升不少</td>
+        <td>LRUMap</td><td>并发安全的LRU结构</td><td>与GroupCache的LRU相比，写性能相当，读性能提升很多</td>
     </tr>
 </table>
