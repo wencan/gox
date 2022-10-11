@@ -46,6 +46,35 @@ func TestLRUMap(t *testing.T) {
 	}
 }
 
+func TestLRUMap_Update(t *testing.T) {
+	m := NewLRUMap(10, 10)
+
+	// 先塞满
+	for i := 0; i < 10*10; i++ {
+		m.Store(i, i)
+	}
+
+	// 更新最后一个区块
+	// 会清理掉第一个区块
+	for i := 10 * 9; i < 10*10; i++ {
+		m.Store(i, i*2)
+	}
+
+	// 检查
+	// 前面10个被清理了
+	for i := 10; i < 10*10; i++ {
+		value, ok := m.silentLoad(i)
+		if assert.True(t, ok, "index: %d", i) {
+			num := value.(int)
+			if i < 10*9 {
+				assert.Equal(t, i, num)
+			} else {
+				assert.Equal(t, i*2, num)
+			}
+		}
+	}
+}
+
 func TestLRUMap_LoadLastChunk(t *testing.T) {
 	m := NewLRUMap(10, 10)
 
