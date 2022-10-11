@@ -193,7 +193,7 @@ func TestLRUMap_ConcurrentlyLoad(t *testing.T) {
 }
 
 func TestLRUMap_ConcurrentlyStoreAndLoad(t *testing.T) {
-	m := NewLRUMap(100000, 500)
+	m := NewLRUMap(100000, 1000)
 
 	var wg sync.WaitGroup
 	wg.Add(500)
@@ -217,4 +217,40 @@ func TestLRUMap_ConcurrentlyStoreAndLoad(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+func TestLRUMap_ConcurrentlyIncrease(t *testing.T) {
+	m := NewLRUMap(10000, 1000) // 参数设大点，不然预期的数据可能被覆盖
+
+	var wg sync.WaitGroup
+	wg.Add(1000)
+	for i := 0; i < 1000; i++ {
+		go func(index int) {
+			defer wg.Done()
+
+			// 每个位置上自增10000次
+			for j := 0; j < 10000; j++ {
+				if j == 0 {
+					m.Store(index, 1)
+				} else {
+					value, ok := m.Load(index)
+					if assert.True(t, ok) {
+						num := value.(int)
+						m.Store(index, num+1)
+					}
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	for i := 0; i < 1000; i++ {
+		value, ok := m.Load(i)
+		if assert.True(t, ok) {
+			num := value.(int)
+			if num != 10000 {
+				assert.Equal(t, i, num, "index: %d", i)
+			}
+		}
+	}
 }
