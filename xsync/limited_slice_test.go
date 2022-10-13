@@ -13,16 +13,10 @@ func Test_lockFreeLimitedSlice(t *testing.T) {
 		index, ok := slice.Append(i)
 		assert.True(t, ok)
 		assert.Equal(t, i, index)
-
-		length := slice.Length()
-		assert.Equal(t, i+1, length)
 	}
 
 	_, ok := slice.Append(11)
 	assert.False(t, ok)
-
-	length := slice.Length()
-	assert.Equal(t, 10, length)
 
 	for i := 0; i < 10; i++ {
 		num, _ := slice.Load(i).(int)
@@ -47,9 +41,6 @@ func Test_lockFreeLimitedSlice_ConcurrentlyAppend(t *testing.T) {
 	}
 	wg.Wait()
 
-	length := slice.Length()
-	assert.Equal(t, 500*10000, length)
-
 	// 空间满后，失败的append
 	wg.Add(500)
 	for i := 0; i < 500; i++ {
@@ -63,9 +54,46 @@ func Test_lockFreeLimitedSlice_ConcurrentlyAppend(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
 
-	length = slice.Length()
-	assert.Equal(t, 500*10000, length)
+func Test_lockFreeLimitedSlice_ConcurrentlyAppend2(t *testing.T) {
+	// 一组顺序的数字，并发随机append
+	big := 100 * 10000
+	slice := newLockFreeLimitedSlice(big)
+
+	ch := generateNumberChaoticChannel(big)
+
+	var wg sync.WaitGroup
+	wg.Add(500)
+	for i := 0; i < 500; i++ {
+		go func() {
+			defer wg.Done()
+
+			for {
+				num, ok := <-ch
+				if !ok {
+					break
+				}
+
+				_, ok = slice.Append(num)
+				assert.True(t, ok)
+			}
+		}()
+	}
+	wg.Wait()
+
+	// 检查
+	var all = make(map[int]int, 1000000)
+	for i := 0; i < big; i++ {
+		value := slice.Load(i)
+		num := value.(int)
+		all[num] = 1
+	}
+	assert.Equal(t, big, len(all))
+
+	for i := 0; i < big; i++ {
+		assert.Equal(t, 1, all[i], "not found %d", i)
+	}
 }
 
 func Test_lockFreeLimitedSlice_ConcurrentlyLoad(t *testing.T) {
