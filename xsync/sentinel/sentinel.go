@@ -68,7 +68,7 @@ func (s *Sentinel) Wait(ctx context.Context, resultPtr interface{}) error {
 	return nil
 }
 
-// Close 直接关闭。重复关闭内部channel会导致panic。
+// Close 关闭。
 func (s *Sentinel) Close() {
 	if !s.closed {
 		close(s.flag)
