@@ -27,10 +27,16 @@ type LRUMap struct {
 	mapping sync.Map
 
 	// chunks 按批次记录最近使用的元素entry，一个区块(chunk)存一批记录。
-	chunks *lockFreeCappedSlice
+	chunks *lockFreeSinglyLinkedList
 
 	// chunkCapacity 区块大小。
 	chunkCapacity int
+
+	// chunkNumLimit 区块数量上限。
+	chunkNumLimit int
+
+	// chunkCount 区块计数。
+	chunkCount int
 
 	// mu 锁。创建新区块，需要加锁。
 	mu sync.Mutex
@@ -41,8 +47,9 @@ type LRUMap struct {
 // 总容量为chunkCapacity*chunkNum。
 func NewLRUMap(chunkCapacity int, chunkNum int) *LRUMap {
 	return &LRUMap{
-		chunks:        newLockFreeCappedSlice(chunkNum),
+		chunks:        newLockFreeSinglyLinkedList(),
 		chunkCapacity: chunkCapacity,
+		chunkNumLimit: chunkNum,
 	}
 }
 
@@ -61,7 +68,7 @@ func (m *LRUMap) Store(key interface{}, value interface{}) {
 
 // upgradeEntry 存放到最新的区块。如果已经是在最新的区块，什么也不干。
 func (m *LRUMap) upgradeEntry(entry *lruMapEntry) {
-	topChunk, _ := m.chunks.Newbie().(*lockFreeLimitedSlice)
+	topChunk, _ := m.chunks.RightPeek().(*lockFreeLimitedSlice)
 	if topChunk != nil {
 		if topChunk == entry.chunk {
 			// 如果已经是最新的区块
@@ -85,7 +92,7 @@ func (m *LRUMap) upgradeEntry(entry *lruMapEntry) {
 
 		// 二次检查
 		preTopChunk := topChunk
-		topChunk, _ := m.chunks.Newbie().(*lockFreeLimitedSlice)
+		topChunk, _ := m.chunks.RightPeek().(*lockFreeLimitedSlice)
 		if topChunk != nil && topChunk != preTopChunk {
 			entry.chunk = topChunk
 			if _, ok := topChunk.Append(entry); ok {
@@ -99,7 +106,14 @@ func (m *LRUMap) upgradeEntry(entry *lruMapEntry) {
 		if _, ok := chunk.Append(entry); !ok {
 			panic("impossibility")
 		}
-		_, covered = m.chunks.Append(chunk) // 返回被覆盖的chunk
+		m.chunks.RightPush(chunk)
+		m.chunkCount++
+
+		if m.chunkCount > m.chunkNumLimit {
+			p, _ := m.chunks.LeftPop()
+			covered, _ = p.(*lockFreeLimitedSlice)
+			m.chunkCount--
+		}
 	}()
 
 	// 清理最后一个区块
