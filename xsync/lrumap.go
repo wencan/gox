@@ -20,7 +20,8 @@ var lruMapEntryPool = sync.Pool{New: func() interface{} {
 }}
 
 // LRUMap 只持有最近使用元素的map。并发安全。
-// 与常见的lru不同，LRUMap按批次清理长期不用的元素，节省查询操作的消耗。
+// 与常见的lru不同，LRUMap按批次（区块）清理长期不用的元素，节省查询操作的消耗。
+// 总是提升Store/Load的元素到最新区块。空间不足时，清理最后一个区块和区块内的元素。
 type LRUMap struct {
 	// mapping 并发安全的map。
 	// value为*lruMapEntry。
@@ -43,7 +44,6 @@ type LRUMap struct {
 }
 
 // NewLRUMap 创建LRUMap。
-// chunk用来记录一个批次的元素使用记录。每次清理chunkCapacity个最后使用的元素。
 // 总容量为chunkCapacity*chunkNum。
 func NewLRUMap(chunkCapacity int, chunkNum int) *LRUMap {
 	return &LRUMap{
@@ -53,8 +53,7 @@ func NewLRUMap(chunkCapacity int, chunkNum int) *LRUMap {
 	}
 }
 
-// Store 存储数据，标记元素为最近使用。
-// 如果空间不够，清理chunkCapacity个最后使用的元素。
+// Store 存储数据。记录元素到最新区块。
 func (m *LRUMap) Store(key interface{}, value interface{}) {
 	entry := lruMapEntryPool.Get().(*lruMapEntry)
 	entry.key = key
@@ -139,7 +138,7 @@ func (m *LRUMap) upgradeEntry(entry *lruMapEntry) {
 	}
 }
 
-// Load 查找元素。如果找到，标记元素为最近使用。
+// Load 查找元素。如果找到，记录元素到最新区块。
 func (m *LRUMap) Load(key interface{}) (value interface{}, ok bool) {
 	v, ok := m.mapping.Load(key)
 	if !ok {
