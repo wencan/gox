@@ -1,8 +1,10 @@
 package xsync
 
 import (
+	"math/rand"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -61,7 +63,12 @@ func Test_lockFreeLimitedSlice_ConcurrentlyAppend2(t *testing.T) {
 	big := 100 * 10000
 	slice := newLockFreeLimitedSlice(big)
 
-	ch := generateNumberChaoticChannel(big)
+	rand.Seed(time.Now().UnixNano())
+	ch := make(chan int, big)
+	for _, num := range rand.Perm(big) {
+		ch <- num
+	}
+	close(ch)
 
 	var wg sync.WaitGroup
 	wg.Add(500)

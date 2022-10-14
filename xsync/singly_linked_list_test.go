@@ -1,10 +1,12 @@
 package xsync
 
 import (
+	"math/rand"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -37,7 +39,12 @@ func Test_lockFreeSList(t *testing.T) {
 
 func Test_lockFreeSList_ConcurrentlyRightPush(t *testing.T) {
 	big := 200 * 10000
-	ch := generateNumberChaoticChannel(big)
+	rand.Seed(time.Now().UnixNano())
+	ch := make(chan int, big)
+	for _, num := range rand.Perm(big) {
+		ch <- num
+	}
+	close(ch)
 
 	slist := newLockFreeSinglyLinkedList()
 
@@ -81,7 +88,13 @@ func Test_lockFreeSList_ConcurrentlyRightPush(t *testing.T) {
 func Test_lockFreeSList_ConcurrentlyPushAndPop(t *testing.T) {
 	// 同时并发push和pop
 	big := 200 * 10000
-	ch := generateNumberChaoticChannel(big)
+
+	rand.Seed(time.Now().UnixNano())
+	ch := make(chan int, big)
+	for _, num := range rand.Perm(big) {
+		ch <- num
+	}
+	close(ch)
 
 	slist := newLockFreeSinglyLinkedList()
 
