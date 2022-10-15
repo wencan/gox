@@ -38,7 +38,8 @@ func (s *Sentinel) Done(result interface{}, err error) {
 }
 
 // Wait 消费者等待生产者提交结果。
-// Wait的resultPtr是指向Done的result的指针。
+// Wait的resultPtr是指向Done的result的指针
+// resultPtr指向的内容是共享的，不可修改。
 func (s *Sentinel) Wait(ctx context.Context, resultPtr interface{}) error {
 	ptr := reflect.ValueOf(resultPtr)
 	if ptr.Kind() != reflect.Ptr || ptr.IsNil() {

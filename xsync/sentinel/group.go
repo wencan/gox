@@ -14,6 +14,7 @@ type SentinelGroup struct {
 }
 
 // Do key删除前，不重复执行key相同的逻辑。
+// destPtr指向的内容是共享的，不可修改。
 // 修改自：https://github.com/wencan/cachex/blob/master/cachex.go
 func (sg *SentinelGroup) Do(ctx context.Context, destPtr interface{}, key string, args interface{}, f func(ctx context.Context, destPtr interface{}, args interface{}) error) error {
 	sentinel := NewSentinel()
@@ -39,6 +40,7 @@ func (sg *SentinelGroup) Do(ctx context.Context, destPtr interface{}, key string
 // argsSlice 是给函数f的参数，顺序和长度等于keys的顺序和长度。
 // []error表示各个下标位置上的错误。如果没有错误，可以为nil。
 // 函数f返回destSlicePtr顺序同keys/argsSlice顺序，destSlicePtr中缺失项必须在返回[]error的相同下标位置有error。
+// destSlicePtr指向的切片内各元素的数据是共享的，不可修改。
 func (sg *SentinelGroup) MDo(ctx context.Context, destSlicePtr interface{}, keys []string, argsSlice interface{}, f func(ctx context.Context, destSlicePtr interface{}, argsSlice interface{}) ([]error, error)) ([]error, error) {
 	if len(keys) == 0 {
 		return nil, nil
