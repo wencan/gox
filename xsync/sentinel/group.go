@@ -8,6 +8,12 @@ import (
 	"sync"
 )
 
+// DoFunc 哨兵执行的函数。
+type DoFunc func(ctx context.Context, destPtr interface{}, args interface{}) error
+
+// MDofunc 哨兵批量处理时执行的函数。
+type MDofunc func(ctx context.Context, destSlicePtr interface{}, argsSlice interface{}) ([]error, error)
+
 // SentinelGroup 哨兵组。
 type SentinelGroup struct {
 	sentinelMap sync.Map
@@ -16,7 +22,7 @@ type SentinelGroup struct {
 // Do key删除前，不重复执行key相同的逻辑。
 // destPtr指向的内容是共享的，不可修改。
 // 修改自：https://github.com/wencan/cachex/blob/master/cachex.go
-func (sg *SentinelGroup) Do(ctx context.Context, destPtr interface{}, key string, args interface{}, f func(ctx context.Context, destPtr interface{}, args interface{}) error) error {
+func (sg *SentinelGroup) Do(ctx context.Context, destPtr interface{}, key string, args interface{}, f DoFunc) error {
 	sentinel := NewSentinel()
 	defer sentinel.Close()
 	actual, loaded := sg.sentinelMap.LoadOrStore(key, sentinel) // 这里性能不是很好。尤其是写多时
@@ -41,7 +47,7 @@ func (sg *SentinelGroup) Do(ctx context.Context, destPtr interface{}, key string
 // []error表示各个下标位置上的错误。如果没有错误，可以为nil。
 // 函数f返回destSlicePtr顺序同keys/argsSlice顺序，destSlicePtr中缺失项必须在返回[]error的相同下标位置有error。
 // destSlicePtr指向的切片内各元素的数据是共享的，不可修改。
-func (sg *SentinelGroup) MDo(ctx context.Context, destSlicePtr interface{}, keys []string, argsSlice interface{}, f func(ctx context.Context, destSlicePtr interface{}, argsSlice interface{}) ([]error, error)) ([]error, error) {
+func (sg *SentinelGroup) MDo(ctx context.Context, destSlicePtr interface{}, keys []string, argsSlice interface{}, f MDofunc) ([]error, error) {
 	if len(keys) == 0 {
 		return nil, nil
 	}
