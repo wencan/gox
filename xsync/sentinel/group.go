@@ -91,6 +91,9 @@ func (sg *SentinelGroup) MDo(ctx context.Context, destSlicePtr interface{}, keys
 		for argsSliceValue.Kind() == reflect.Ptr {
 			argsSliceValue = reflect.Indirect(argsSliceValue)
 		}
+		if len(keys) != argsSliceValue.Len() { // 参数检查
+			return nil, errors.New("wrong argsSlice")
+		}
 		actualArgsSliceValue := reflect.MakeSlice(argsSliceValue.Type(), 0, len(doSentinelMap))
 		indexMap := make(map[int]int, len(doSentinelMap)) // 外部索引 -> 执行函数参数序列中的索引
 		var argCount int
