@@ -44,7 +44,7 @@ func TestSentinel_Wait(t *testing.T) {
 		},
 		{
 			name:             "put_error",
-			goroutines:       1,
+			goroutines:       500,
 			putResult:        nil,
 			putErr:           errors.New("test"),
 			newPullResultPtr: func() interface{} { return &Response{} },
