@@ -20,7 +20,7 @@ var lruMapEntryPool = sync.Pool{New: func() interface{} {
 }}
 
 // LRUMap 只持有最近使用元素的map。并发安全。
-// 与常见的lru不同，LRUMap按批次（区块）清理长期不用的元素，节省查询操作的消耗。
+// 按批次（区块）清理长期不用的元素。
 // 总是提升Store/Load的元素到最新区块。空间不足时，清理最后一个区块和区块内的元素。
 type LRUMap struct {
 	// mapping 并发安全的map。
@@ -41,19 +41,31 @@ type LRUMap struct {
 
 	// mu 锁。创建新区块，需要加锁。
 	mu sync.Mutex
+
+	// onEvicted 元素被清理时，回调该函数。可用于回收资源。
+	onEvicted func(k, v interface{})
 }
 
 // NewLRUMap 创建LRUMap。
 // 总容量为chunkCapacity*chunkNum。
 func NewLRUMap(chunkCapacity int, chunkNum int) *LRUMap {
+	return NewLRUMapWithEvict(chunkCapacity, chunkNum, nil)
+}
+
+// NewLRUMapWithEvict 创建LRUMap。
+// 总容量为chunkCapacity*chunkNum。
+// 当最近不用的元素和被覆盖的元素被清理时，onEvicted函数将被回调。
+func NewLRUMapWithEvict(chunkCapacity int, chunkNum int, onEvicted func(key, value interface{})) *LRUMap {
 	return &LRUMap{
 		chunks:        newLockFreeSinglyLinkedList(),
 		chunkCapacity: chunkCapacity,
 		chunkNumLimit: chunkNum,
+		onEvicted:     onEvicted,
 	}
 }
 
 // Store 存储数据。记录元素到最新区块。
+// 被覆盖的value会跟随最近不用的value，等待被清理。
 func (m *LRUMap) Store(key interface{}, value interface{}) {
 	entry := lruMapEntryPool.Get().(*lruMapEntry)
 	entry.key = key
@@ -131,6 +143,11 @@ func (m *LRUMap) upgradeEntry(entry *lruMapEntry) {
 							m.mapping.Delete(entry.key)
 						}
 					}
+					// 回调通知
+					if m.onEvicted != nil {
+						m.onEvicted(entry.key, entry.value)
+					}
+					// 释放lruMapEntry对象
 					lruMapEntryPool.Put(entry)
 				}
 			}
@@ -142,7 +159,7 @@ func (m *LRUMap) upgradeEntry(entry *lruMapEntry) {
 func (m *LRUMap) Load(key interface{}) (value interface{}, ok bool) {
 	v, ok := m.mapping.Load(key)
 	if !ok {
-		return nil, ok
+		return nil, false
 	}
 
 	entry, _ := v.(*lruMapEntry)
@@ -151,14 +168,16 @@ func (m *LRUMap) Load(key interface{}) (value interface{}, ok bool) {
 	return entry.value, ok
 }
 
-// silentLoad 查找元素，不更新使用记录。用于支持测试。
-func (m *LRUMap) silentLoad(key interface{}) (value interface{}, ok bool) {
+// SilentLoad 查找元素。如果找到，返回一个记录元素到最新区块的函数。
+func (m *LRUMap) SilentLoad(key interface{}) (value interface{}, upgrade func(), ok bool) {
 	v, ok := m.mapping.Load(key)
 	if !ok {
-		return nil, ok
+		return nil, nil, false
 	}
 
 	entry, _ := v.(*lruMapEntry)
 
-	return entry.value, ok
+	return entry.value, func() {
+		m.upgradeEntry(entry)
+	}, true
 }

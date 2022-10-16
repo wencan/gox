@@ -14,7 +14,7 @@ func TestLRUMap(t *testing.T) {
 	for i := 0; i < 10*10; i++ {
 		m.Store(i, i)
 
-		value, ok := m.silentLoad(i)
+		value, _, ok := m.SilentLoad(i)
 		if assert.True(t, ok) {
 			num := value.(int)
 			assert.Equal(t, i, num)
@@ -25,7 +25,7 @@ func TestLRUMap(t *testing.T) {
 	for i := 10 * 10; i < 10*10+10; i++ {
 		m.Store(i, i)
 
-		value, ok := m.silentLoad(i)
+		value, _, ok := m.SilentLoad(i)
 		if assert.True(t, ok) {
 			num := value.(int)
 			assert.Equal(t, i, num)
@@ -33,12 +33,12 @@ func TestLRUMap(t *testing.T) {
 	}
 	// 已经清理的部分
 	for i := 0; i < 10; i++ {
-		_, ok := m.silentLoad(i)
+		_, _, ok := m.SilentLoad(i)
 		assert.False(t, ok)
 	}
 	// 还在的部分
 	for i := 10; i < 10*10+10; i++ {
-		value, ok := m.silentLoad(i)
+		value, _, ok := m.SilentLoad(i)
 		if assert.True(t, ok, "index: %d", i) {
 			num := value.(int)
 			assert.Equal(t, i, num)
@@ -63,7 +63,7 @@ func TestLRUMap_Update(t *testing.T) {
 	// 检查
 	// 前面10个被清理了
 	for i := 10; i < 10*10; i++ {
-		value, ok := m.silentLoad(i)
+		value, _, ok := m.SilentLoad(i)
 		if assert.True(t, ok, "index: %d", i) {
 			num := value.(int)
 			if i < 10*9 {
@@ -94,7 +94,7 @@ func TestLRUMap_LoadLastChunk(t *testing.T) {
 	}
 	// 检查
 	for i := 0; i < 10*10; i++ {
-		value, ok := m.silentLoad(i)
+		value, _, ok := m.SilentLoad(i)
 		if assert.True(t, ok, "index: %d", i) {
 			num := value.(int)
 			assert.Equal(t, i, num)
@@ -121,11 +121,11 @@ func TestLRUMap_LoadFirstChunk(t *testing.T) {
 		if i == 1 {
 			continue
 		}
-		_, ok := m.silentLoad(i)
+		_, _, ok := m.SilentLoad(i)
 		assert.False(t, ok)
 	}
 	for i := 10; i < 10*10; i++ {
-		value, ok := m.silentLoad(i)
+		value, _, ok := m.SilentLoad(i)
 		if assert.True(t, ok, "index: %d", i) {
 			num := value.(int)
 			assert.Equal(t, i, num)
@@ -150,7 +150,7 @@ func TestLRUMap_ConcurrentlyStore(t *testing.T) {
 	wg.Wait()
 
 	for i := 0; i < 500*10000; i++ {
-		value, ok := m.silentLoad(i)
+		value, _, ok := m.SilentLoad(i)
 		if assert.True(t, ok) {
 			num := value.(int)
 			if num != i {
