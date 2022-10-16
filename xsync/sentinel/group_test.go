@@ -330,8 +330,8 @@ func TestSentinelGroup_ConcurrentlyMDo(t *testing.T) {
 				var args []*Request
 				var want []*Response
 
-				for i := 0; i < rand.Intn(9)+1; i++ {
-					if count+1 > len(all) {
+				for i := 0; i < rand.Intn(10); i++ {
+					if count >= len(all) {
 						break
 					}
 					index := all[count]
@@ -342,7 +342,7 @@ func TestSentinelGroup_ConcurrentlyMDo(t *testing.T) {
 
 					count++
 				}
-				if len(keys) == 0 {
+				if count >= len(all) && len(keys) == 0 {
 					break // end
 				}
 
