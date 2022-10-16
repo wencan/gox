@@ -123,7 +123,7 @@ func TestSentinelGroup_Do(t *testing.T) {
 	}{
 		{
 			name:       "simple",
-			goroutines: 100,
+			goroutines: 1000,
 			newDestPtr: func() interface{} { return new(string) },
 			key:        "simple",
 			args:       "myargs",
@@ -136,7 +136,7 @@ func TestSentinelGroup_Do(t *testing.T) {
 		},
 		{
 			name:       "struct",
-			goroutines: 100,
+			goroutines: 1000,
 			newDestPtr: func() interface{} { return new(Response) },
 			key:        "struct",
 			args:       Request{Greetings: "你好"},
@@ -150,7 +150,7 @@ func TestSentinelGroup_Do(t *testing.T) {
 		},
 		{
 			name:       "slice",
-			goroutines: 100,
+			goroutines: 1000,
 			newDestPtr: func() interface{} { return &[]*Response{} },
 			key:        "slice",
 			args:       Request{Greetings: "你好"},
@@ -166,7 +166,7 @@ func TestSentinelGroup_Do(t *testing.T) {
 		},
 		{
 			name:       "args_is_nil",
-			goroutines: 100,
+			goroutines: 1000,
 			newDestPtr: func() interface{} { return new(Response) },
 			key:        "args_is_nil",
 			args:       nil,
@@ -179,7 +179,7 @@ func TestSentinelGroup_Do(t *testing.T) {
 		},
 		{
 			name:       "error",
-			goroutines: 100,
+			goroutines: 1000,
 			newDestPtr: func() interface{} { return new(Response) },
 			key:        "error",
 			args:       Request{Greetings: "你好"},
@@ -380,7 +380,7 @@ func TestSentinelGroup_MDo(t *testing.T) {
 	}{
 		{
 			name:            "1",
-			goroutines:      100,
+			goroutines:      1000,
 			newDestSlicePtr: func() interface{} { return new([]string) },
 			keys:            []string{"1"},
 			argsSlice:       []int{1},
@@ -397,7 +397,7 @@ func TestSentinelGroup_MDo(t *testing.T) {
 		},
 		{
 			name:            "1_2",
-			goroutines:      100,
+			goroutines:      1000,
 			newDestSlicePtr: func() interface{} { return new([]string) },
 			keys:            []string{"1", "2"},
 			argsSlice:       []int{1, 2},
@@ -414,7 +414,7 @@ func TestSentinelGroup_MDo(t *testing.T) {
 		},
 		{
 			name:            "struct_one",
-			goroutines:      100,
+			goroutines:      1000,
 			newDestSlicePtr: func() interface{} { return new([]*Response) },
 			keys:            []string{"struct_one"},
 			argsSlice:       []*Request{{Greetings: "one"}},
@@ -431,7 +431,7 @@ func TestSentinelGroup_MDo(t *testing.T) {
 		},
 		{
 			name:            "struct_one_two",
-			goroutines:      100,
+			goroutines:      1000,
 			newDestSlicePtr: func() interface{} { return new([]*Response) },
 			keys:            []string{"struct_one", "struct_two"},
 			argsSlice:       []*Request{{Greetings: "one"}, {Greetings: "two"}},
@@ -448,7 +448,7 @@ func TestSentinelGroup_MDo(t *testing.T) {
 		},
 		{
 			name:            "struct_one_two_three",
-			goroutines:      100,
+			goroutines:      1000,
 			newDestSlicePtr: func() interface{} { return new([]*Response) },
 			keys:            []string{"struct_one", "struct_two", "struct_three"},
 			argsSlice:       []*Request{{Greetings: "one"}, {Greetings: "two"}, {Greetings: "three"}},
@@ -465,7 +465,7 @@ func TestSentinelGroup_MDo(t *testing.T) {
 		},
 		{
 			name:            "struct_one_2_tee",
-			goroutines:      100,
+			goroutines:      1000,
 			newDestSlicePtr: func() interface{} { return new([]*Response) },
 			keys:            []string{"struct_one", "struct_two", "struct_three", "struct_four", "struct_five", "struct_six", "struct_seven", "struct_eight", "struct_nine", "struct_ten"},
 			argsSlice:       []*Request{{Greetings: "one"}, {Greetings: "two"}, {Greetings: "three"}, {Greetings: "four"}, {Greetings: "five"}, {Greetings: "six"}, {Greetings: "seven"}, {Greetings: "eight"}, {Greetings: "nine"}, {Greetings: "ten"}},
@@ -482,7 +482,7 @@ func TestSentinelGroup_MDo(t *testing.T) {
 		},
 		{
 			name:            "struct_one_notfound_three",
-			goroutines:      100,
+			goroutines:      1000,
 			newDestSlicePtr: func() interface{} { return new([]*Response) },
 			keys:            []string{"struct_one", "struct_notfound", "struct_three"},
 			argsSlice:       []*Request{{Greetings: "one"}, {Greetings: "notfound"}, {Greetings: "three"}},
@@ -506,14 +506,51 @@ func TestSentinelGroup_MDo(t *testing.T) {
 		},
 		{
 			name:            "do_error",
-			goroutines:      100,
+			goroutines:      1000,
 			newDestSlicePtr: func() interface{} { return new([]*Response) },
 			keys:            []string{"do_error"},
 			argsSlice:       []*Request{{Greetings: "one"}},
 			fDo: func(ctx context.Context, destSlicePtr, argsSlice interface{}) ([]error, error) {
 				return nil, errors.New("wow")
 			},
-			wantErr: true,
+			want:     *(new([]*Response)),
+			wantErr:  false,
+			wantErrs: []bool{true},
+		},
+		{
+			name:            "do_partial_error",
+			goroutines:      1000,
+			newDestSlicePtr: func() interface{} { return new([]*Response) },
+			keys:            []string{"do_partial_error_one", "do_partial_error1", "do_partial_error_two", "do_partial_error2"},
+			argsSlice:       []*Request{{Greetings: "one"}, {Greetings: ""}, {Greetings: "two"}, {Greetings: ""}},
+			fDo: func(ctx context.Context, destSlicePtr, argsSlice interface{}) ([]error, error) {
+				req := argsSlice.([]*Request)
+				resp := destSlicePtr.(*[]*Response)
+
+				var errs []error
+				for _, r := range req {
+					switch r.Greetings {
+					case "":
+						errs = append(errs, errors.New("wow"))
+					default:
+						*resp = append(*resp, &Response{Echo: "echo: " + r.Greetings})
+						errs = append(errs, nil)
+					}
+				}
+				return errs, nil
+			},
+			want:     []*Response{{Echo: "echo: one"}, {Echo: "echo: two"}},
+			wantErr:  false,
+			wantErrs: []bool{false, true, false, true},
+		},
+		{
+			name:            "empty",
+			goroutines:      1000,
+			newDestSlicePtr: func() interface{} { return new([]*Response) },
+			keys:            []string{},
+			argsSlice:       []*Request{},
+			fDo:             nil,
+			want:            *(new([]*Response)),
 		},
 	}
 	for _, tt := range tests {
@@ -521,7 +558,7 @@ func TestSentinelGroup_MDo(t *testing.T) {
 			var sg SentinelGroup
 
 			var wg sync.WaitGroup
-			// tt.goroutines = 1
+			tt.goroutines = 1
 			wg.Add(tt.goroutines)
 			for i := 0; i < tt.goroutines; i++ {
 				go func() {
@@ -534,7 +571,12 @@ func TestSentinelGroup_MDo(t *testing.T) {
 						assert.NotNil(t, err)
 					} else {
 						if assert.Nil(t, err) {
-							assert.Equal(t, tt.want, reflect.ValueOf(destSlicePtr).Elem().Interface())
+							if !assert.Equal(t, tt.want, reflect.ValueOf(destSlicePtr).Elem().Interface()) {
+								t.Log(tt.want == nil)
+								t.Log(reflect.ValueOf(destSlicePtr).Elem().Interface() == nil)
+								t.Log(reflect.ValueOf(destSlicePtr).Interface() == destSlicePtr)
+								t.Log(reflect.ValueOf(destSlicePtr).Elem().Len())
+							}
 						}
 					}
 

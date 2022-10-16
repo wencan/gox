@@ -46,6 +46,7 @@ func (sg *SentinelGroup) Do(ctx context.Context, destPtr interface{}, key string
 // argsSlice 是给函数f的参数，顺序和长度等于keys的顺序和长度。
 // []error表示各个下标位置上的错误。如果没有错误，可以为nil。
 // 函数f返回destSlicePtr顺序同keys/argsSlice顺序，destSlicePtr中缺失项必须在返回[]error的相同下标位置有error。
+// 总是尽可能返回[]error，表示各个位置上的错误；除非无法组成合格的[]error，才会返回error。
 // destSlicePtr指向的切片内各元素的数据是共享的，不可修改。
 func (sg *SentinelGroup) MDo(ctx context.Context, destSlicePtr interface{}, keys []string, argsSlice interface{}, f MDofunc) ([]error, error) {
 	if len(keys) == 0 {
@@ -115,10 +116,11 @@ func (sg *SentinelGroup) MDo(ctx context.Context, destSlicePtr interface{}, keys
 		actualDestSlicePtr := reflect.New(destSliceValue.Type())
 		errs, err := f(ctx, actualDestSlicePtr.Interface(), actualArgsSliceValue.Interface())
 		if err != nil {
-			for _, sentinel := range doSentinelMap {
-				sentinel.Done(nil, err)
+			// 每个位置上都是错误
+			errs = make([]error, 0, len(doSentinelMap))
+			for idx := 0; idx < actualArgsSliceValue.Len(); idx++ {
+				errs = append(errs, err)
 			}
-			return nil, err
 		}
 		actualDestSlice := reflect.Indirect(actualDestSlicePtr)
 
@@ -188,19 +190,6 @@ func (sg *SentinelGroup) MDo(ctx context.Context, destSlicePtr interface{}, keys
 	}
 
 	if len(destElemErrorMap) > 0 {
-		if len(destElemErrorMap) == len(keys) {
-			// 如果全是同一个错误
-			var same bool = true
-			for _, e := range errs {
-				if e != errs[0] {
-					same = false
-					break
-				}
-			}
-			if same {
-				return nil, errs[0]
-			}
-		}
 		return errs, nil
 	}
 	return nil, nil
