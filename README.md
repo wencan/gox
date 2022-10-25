@@ -8,7 +8,7 @@ Go语言（非官方）基础库。
 ## 目录
 <table>
     <tr>
-        <th>包</th><th>结构体</th><th>作用</th><th>说明</th>
+        <th>包</th><th>结构体或方法</th><th>作用</th><th>说明</th>
     </tr>
     <tr>
         <td rowspan="1">xcontainer</td><td>ListMap</td><td>支持LRU缓存</td><td>现在LRU缓存更好的选择是xsync/LRUMap</td>
@@ -21,5 +21,8 @@ Go语言（非官方）基础库。
     </tr>
     <tr>
         <td>xsync/sentinel</td><td><a href="https://pkg.go.dev/github.com/wencan/gox/xsync/sentinel#SentinelGroup">SentinelGroup</a></td><td>哨兵机制</td><td>同singleflight，但支持批量处理</td>
+    </tr>
+    <tr>
+        <td><a href="https://pkg.go.dev/github.com/wencan/gox/async">async</a></td><td><a href="https://pkg.go.dev/github.com/wencan/gox/async#Series">Series</a><br><a href="https://pkg.go.dev/github.com/wencan/gox/async#Parallel">Parallel</a></td><td></td><td>协程和异步任务的辅助方法</td>
     </tr>
 </table>
