@@ -1,7 +1,6 @@
 package xsync
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 )
@@ -121,9 +120,6 @@ func (bag *Bag) Range(f func(p interface{}) (stopIteration bool)) {
 	}
 	store.Range(func(index int, p interface{}) (stopIteration bool) {
 		entry := p.(*bagEntry)
-		if entry.p == 100 {
-			fmt.Println(entry)
-		}
 		if atomic.LoadUint32(&entry.deleted) == 0 {
 			return f(entry.p)
 		}
