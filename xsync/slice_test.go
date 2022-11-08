@@ -102,7 +102,8 @@ func TestSlice_UpdateAt(t *testing.T) {
 	}
 
 	for i := 0; i < 10240; i++ {
-		slice.UpdateAt(i, i*2)
+		old := slice.UpdateAt(i, i*2)
+		assert.Equal(t, i, old)
 	}
 
 	length := slice.Length()
