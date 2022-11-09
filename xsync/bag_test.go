@@ -14,7 +14,7 @@ func TestBag(t *testing.T) {
 
 	getAll := func() []int {
 		ints := []int{}
-		bag.Range(func(p interface{}) (stopIteration bool) {
+		bag.Range(func(index int, p interface{}) (stopIteration bool) {
 			value := p.(int)
 			ints = append(ints, value)
 			return false
@@ -24,10 +24,10 @@ func TestBag(t *testing.T) {
 	}
 
 	// 放 0-100
-	delFuncs := make([]func(), 0, 100)
+	delIndexes := make([]int, 0, 100)
 	for i := 0; i < 100; i++ {
-		delFunc := bag.Add(i)
-		delFuncs = append(delFuncs, delFunc)
+		index := bag.Add(i)
+		delIndexes = append(delIndexes, index)
 	}
 
 	// 输出全部
@@ -40,9 +40,9 @@ func TestBag(t *testing.T) {
 	assert.Equal(t, want, all)
 
 	// 删除中间的0、10、20...
-	for i := 0; i < 100; i++ {
-		if i%10 == 0 {
-			delFuncs[i]()
+	for _, index := range delIndexes {
+		if index%10 == 0 {
+			bag.DeleteAt(index)
 		}
 	}
 	// 再对比
@@ -79,18 +79,18 @@ func TestBagConcurrentlyUpdate(t *testing.T) {
 
 	// 并发添加/删除
 	var wg sync.WaitGroup
-	delFuncChans := make(chan func(), big)
+	delIndexChans := make(chan int, big)
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
 			for _, num := range rand.Perm(big) {
-				delFunc := bag.Add(num)
-				delFuncChans <- delFunc
+				index := bag.Add(num)
+				delIndexChans <- index
 
-				delFunc = <-delFuncChans
-				delFunc()
+				index = <-delIndexChans
+				bag.DeleteAt(index)
 			}
 		}()
 	}
@@ -109,7 +109,7 @@ func TestBagConcurrentlyUpdate(t *testing.T) {
 
 	// 遍历检查
 	all := make([]int, 0, big)
-	bag.Range(func(p interface{}) (stopIteration bool) {
+	bag.Range(func(index int, p interface{}) (stopIteration bool) {
 		num := p.(int)
 		all = append(all, num)
 		return false
@@ -130,18 +130,18 @@ func TestBagConcurrentlyUpdateAndRange(t *testing.T) {
 
 	// 并发添加/删除
 	var wg sync.WaitGroup
-	delFuncChans := make(chan func(), big)
+	delIndexChans := make(chan int, big)
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
 			for _, num := range rand.Perm(big) {
-				delFunc := bag.Add(num)
-				delFuncChans <- delFunc
+				index := bag.Add(num)
+				delIndexChans <- index
 
-				delFunc = <-delFuncChans
-				delFunc()
+				index = <-delIndexChans
+				bag.DeleteAt(index)
 			}
 		}()
 	}
@@ -163,7 +163,7 @@ func TestBagConcurrentlyUpdateAndRange(t *testing.T) {
 					return
 				}
 
-				bag.Range(func(p interface{}) (stopIteration bool) {
+				bag.Range(func(index int, p interface{}) (stopIteration bool) {
 					_ = p.(int)
 					return false
 				})

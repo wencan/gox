@@ -7,7 +7,7 @@ import (
 
 var deletedBagEntry = new(interface{})
 
-// Bag 并发安全的容量。支持添加、删除、（不保证顺序的）遍历。
+// Bag 并发安全的容量。
 type Bag struct {
 	// mux 锁。
 	mu sync.Mutex
@@ -28,15 +28,16 @@ func NewBag() *Bag {
 	return bag
 }
 
-// Add 添加一个元素，返回删除这个元素的函数。
-func (bag *Bag) Add(p interface{}) (delete func()) {
+// Add 添加一个元素，返回索引。
+// 警告：删除元素的索引会被重用。
+func (bag *Bag) Add(p interface{}) int {
 	store, _ := bag.store.Load().(*lockFreeSlice)
 	if store != nil {
 		if index, ok := store.Append(p); ok {
-			return bag.deleteFunc(index)
+			return index
 		}
 
-		// 尝试回收索引，并重用
+		// 尝试重用回收的索引
 		recycled, _ := bag.indexPool.LeftPop()
 		if recycled != nil {
 			// 拿到的可能时Grow之后的index
@@ -45,7 +46,7 @@ func (bag *Bag) Add(p interface{}) (delete func()) {
 
 			index := recycled.(int)
 			store.UpdateAt(index, p)
-			return bag.deleteFunc(index)
+			return index
 		}
 	}
 
@@ -65,7 +66,7 @@ func (bag *Bag) Add(p interface{}) (delete func()) {
 		store = bag.store.Load().(*lockFreeSlice)
 		if store != previous {
 			if index, ok := store.Append(p); ok {
-				return bag.deleteFunc(index)
+				return index
 			}
 		}
 	}
@@ -78,16 +79,12 @@ func (bag *Bag) Add(p interface{}) (delete func()) {
 	}
 	bag.store.Store(newStore)
 
-	return bag.deleteFunc(index)
+	return index
 }
 
-func (bag *Bag) deleteFunc(index int) func() {
-	return func() {
-		bag.deleteAt(index)
-	}
-}
-
-func (bag *Bag) deleteAt(index int) {
+// DeleteAt 删除指定位置上的元素。
+// 警告，删除后，index会被回收重用。
+func (bag *Bag) DeleteAt(index int) {
 	store, _ := bag.store.Load().(*lockFreeSlice)
 	if store == nil {
 		panic("empty bag")
@@ -99,8 +96,8 @@ func (bag *Bag) deleteAt(index int) {
 	}
 }
 
-// Range 遍历，不保证顺序。
-func (bag *Bag) Range(f func(p interface{}) (stopIteration bool)) {
+// Range 基于索引顺序的遍历。
+func (bag *Bag) Range(f func(index int, p interface{}) (stopIteration bool)) {
 	store, _ := bag.store.Load().(*lockFreeSlice)
 	if store == nil {
 		return
@@ -109,6 +106,6 @@ func (bag *Bag) Range(f func(p interface{}) (stopIteration bool)) {
 		if p == deletedBagEntry {
 			return false
 		}
-		return f(p)
+		return f(index, p)
 	})
 }

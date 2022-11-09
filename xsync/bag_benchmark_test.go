@@ -8,19 +8,19 @@ import (
 func BenchmarkBagWrite(b *testing.B) {
 	bag := NewBag()
 
-	ch := make(chan func(), 10000000)
+	ch := make(chan int, 10000000)
 
 	b.ResetTimer()
 	b.RunParallel(func(p *testing.PB) {
 		var i int
 		for p.Next() {
-			delFunc := bag.Add(i)
-			ch <- delFunc
+			index := bag.Add(i)
+			ch <- index
 
 			i++
 
-			delFunc = <-ch
-			delFunc()
+			index = <-ch
+			bag.DeleteAt(index)
 		}
 	})
 }
@@ -54,7 +54,7 @@ func BenchmarkBagRange(b *testing.B) {
 
 	b.RunParallel(func(p *testing.PB) {
 		for p.Next() {
-			bag.Range(func(p interface{}) (stopIteration bool) {
+			bag.Range(func(index int, p interface{}) (stopIteration bool) {
 				return false
 			})
 		}
