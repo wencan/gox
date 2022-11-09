@@ -12,6 +12,10 @@ type lockFreeSliceEntry struct {
 	p interface{}
 }
 
+var lockFreeSliceEntryPool = sync.Pool{New: func() interface{} {
+	return &lockFreeSliceEntry{}
+}}
+
 // lockFreeSlice 无锁slice实现。
 // 增加容量时，通过grow函数创建一个新的lockFreeSlice对象。
 type lockFreeSlice struct {
@@ -145,11 +149,13 @@ func (s *lockFreeSlice) Load(index int) interface{} {
 func (s *lockFreeSlice) UpdateAt(index int, p interface{}) (old interface{}) {
 	index1d, index2d := slicesPostion(index)
 
-	// 下面，等后面想办法优化
-	newEntry := &lockFreeSliceEntry{p: p}
+	newEntry := lockFreeSliceEntryPool.Get().(*lockFreeSliceEntry)
+	newEntry.p = p
 	oldVal := s.arrays[index1d][index2d].Swap(newEntry)
 	oldEntry := oldVal.(*lockFreeSliceEntry)
-	return oldEntry.p
+	old = oldEntry.p
+	lockFreeSliceEntryPool.Put(oldEntry)
+	return old
 }
 
 // Range 遍历。
