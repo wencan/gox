@@ -7,7 +7,7 @@ import (
 
 // lockFreeSliceEntry 存在atomic.Value的是*lockFreeSliceEntry。
 // lockFreeSliceEntry指针为nil，表示还未初始化；lockFreeSliceEntry.p为nil，表示用户存了一个数据nil。
-// atomic.Value不支持更新不同类型的值，但如果只是更新lockFreeSliceEntry内的p，就绕过了atomic.Value的限制。
+// atomic.Value不支持存nil，不支持更新不同类型的值，使用lockFreeSliceEntry，绕过了atomic.Value的限制。
 type lockFreeSliceEntry struct {
 	p interface{}
 }
