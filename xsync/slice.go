@@ -5,12 +5,22 @@ import (
 	"sync/atomic"
 )
 
+// lockFreeSliceEntry 存在atomic.Value的是*lockFreeSliceEntry。
+// lockFreeSliceEntry指针为nil，表示还未初始化；lockFreeSliceEntry.p为nil，表示用户存了一个数据nil。
+// atomic.Value不支持更新不同类型的值，但如果只是更新lockFreeSliceEntry内的p，就绕过了atomic.Value的限制。
+type lockFreeSliceEntry struct {
+	p interface{}
+}
+
 // lockFreeSlice 无锁slice实现。
 // 增加容量时，通过grow函数创建一个新的lockFreeSlice对象。
 type lockFreeSlice struct {
 	// arrays 存放数据的二维切片，第二维由数组转换来。lockFreeSlice对象的arrays数据不变，变的是atomic.Value内的值。
 	// grow时，创建一个新的arrays，拷贝原arrays，追加新数组。
 	arrays [][]atomic.Value
+
+	// entries 每次Grow时，预分配一批lockFreeSliceEntry，优化内存。
+	entries [][]lockFreeSliceEntry
 
 	// capacity 总容量。
 	// lockFreeSlice对象内的容量不会发生变化。
@@ -29,42 +39,35 @@ func (s *lockFreeSlice) Grow() *lockFreeSlice {
 	}
 
 	// 新数组
-	var tail []atomic.Value
-	switch lastCapacity {
+	var tailCapacity int
+	switch lastCapacity { // 这里，switch 比 if，更能清晰展现逻辑
 	case 0:
-		array := new([8]atomic.Value)
-		tail = array[:]
+		tailCapacity = 8
 	case 8:
-		array := new([16]atomic.Value)
-		tail = array[:]
+		tailCapacity = 16
 	case 16:
-		array := new([32]atomic.Value)
-		tail = array[:]
+		tailCapacity = 32
 	case 32:
-		array := new([64]atomic.Value)
-		tail = array[:]
+		tailCapacity = 64
 	case 64:
-		array := new([128]atomic.Value)
-		tail = array[:]
+		tailCapacity = 128
 	case 128:
-		array := new([256]atomic.Value)
-		tail = array[:]
+		tailCapacity = 256
 	case 256:
-		array := new([512]atomic.Value)
-		tail = array[:]
+		tailCapacity = 512
 	default:
-		array := new([1024]atomic.Value)
-		tail = array[:]
+		tailCapacity = 1024
 	}
+	tail := make([]atomic.Value, tailCapacity)
+	entries := make([]lockFreeSliceEntry, tailCapacity) // 优化内存
 
 	// 新slice
 	newSlice := &lockFreeSlice{
-		arrays:   make([][]atomic.Value, len(s.arrays)),
+		arrays:   append(s.arrays, tail),
+		entries:  append(s.entries, entries),
 		capacity: s.capacity + len(tail),
 		length:   s.length,
 	}
-	copy(newSlice.arrays, s.arrays)
-	newSlice.arrays = append(newSlice.arrays, tail)
 	return newSlice
 }
 
@@ -119,7 +122,13 @@ func (s *lockFreeSlice) Append(p interface{}) (int, bool) {
 
 		if atomic.CompareAndSwapUint64(s.length, index, index+1) {
 			index1d, index2d := slicesPostion(int(index))
-			s.arrays[index1d][index2d].Store(p)
+
+			// 这里需要警惕，length增长了，但数据还没存进去。
+			// 等到Store完成，才算Append结束。
+
+			entry := &s.entries[index1d][index2d]
+			entry.p = p
+			s.arrays[index1d][index2d].Store(entry)
 			return int(index), true
 		}
 	}
@@ -128,13 +137,19 @@ func (s *lockFreeSlice) Append(p interface{}) (int, bool) {
 // Load 根据下标取回一个元素。
 func (s *lockFreeSlice) Load(index int) interface{} {
 	index1d, index2d := slicesPostion(index)
-	return s.arrays[index1d][index2d].Load()
+	entry := s.arrays[index1d][index2d].Load().(*lockFreeSliceEntry)
+	return entry.p
 }
 
 // UpdateAt 更新下标位置上的元素，返回旧值。
 func (s *lockFreeSlice) UpdateAt(index int, p interface{}) (old interface{}) {
 	index1d, index2d := slicesPostion(index)
-	return s.arrays[index1d][index2d].Swap(p)
+
+	// 下面，等后面想办法优化
+	newEntry := &lockFreeSliceEntry{p: p}
+	oldVal := s.arrays[index1d][index2d].Swap(newEntry)
+	oldEntry := oldVal.(*lockFreeSliceEntry)
+	return oldEntry.p
 }
 
 // Range 遍历。
@@ -144,14 +159,20 @@ func (s *lockFreeSlice) Range(f func(index int, p interface{}) (stopIteration bo
 	}
 
 	var index int
+	length := int(atomic.LoadUint64(s.length))
 	for _, array := range s.arrays {
 		for _, value := range array {
-			if index >= int(atomic.LoadUint64(s.length)) {
+			if index >= length {
 				return
 			}
 
-			p := value.Load()
-			stopIteration := f(index, p)
+			val := value.Load()
+			if val == nil {
+				// lenght增长了，但数据还没存进去
+				break
+			}
+			entry := val.(*lockFreeSliceEntry)
+			stopIteration := f(index, entry.p)
 			if stopIteration {
 				return
 			}
@@ -162,6 +183,7 @@ func (s *lockFreeSlice) Range(f func(index int, p interface{}) (stopIteration bo
 }
 
 // Length 返回长度。
+// 在并发Append的场景下，这个长度并不可靠。因为Append时，先增加长度，再存数据。可能长度增加了，对应的数据还没存。
 func (s *lockFreeSlice) Length() int {
 	if s.length == nil {
 		return 0
@@ -239,6 +261,7 @@ func (slice *Slice) Range(f func(index int, p interface{}) (stopIteration bool))
 }
 
 // Length 长度。
+// 在并发Append的场景下，这个长度并不可靠。因为Append时，先增加长度，再存数据。可能长度增加了，对应的数据还没存。
 func (slice *Slice) Length() int {
 	store, _ := slice.store.Load().(*lockFreeSlice)
 	if store == nil {

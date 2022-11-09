@@ -197,3 +197,47 @@ func TestSlice_ConcurrentlyAppendAndUpdateAt(t *testing.T) {
 		return false
 	})
 }
+
+func TestSlice_concurrentlyAppendAndRange(t *testing.T) {
+	var slice Slice
+	big := 50000
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			r := rand.New(rand.NewSource(time.Now().UnixNano()))
+			for _, num := range r.Perm(big) {
+				slice.Append(num)
+			}
+		}()
+	}
+
+	var done = false
+	go func() {
+		wg.Wait()
+		done = true
+	}()
+
+	var wg2 sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg2.Add(1)
+		go func() {
+			defer wg2.Done()
+
+			for {
+				if done {
+					return
+				}
+				slice.Range(func(index int, p interface{}) (stopIteration bool) {
+					_ = p.(int)
+					return false
+				})
+			}
+		}()
+
+	}
+	wg2.Wait()
+}
