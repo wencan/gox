@@ -83,7 +83,7 @@ func (bag *Bag) Add(p interface{}) int {
 }
 
 // DeleteAt 删除指定位置上的元素。
-// 警告，删除后，index会被回收重用。
+// 警告：删除后，index会被回收重用。
 func (bag *Bag) DeleteAt(index int) {
 	store, _ := bag.store.Load().(*lockFreeSlice)
 	if store == nil {

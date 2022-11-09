@@ -15,6 +15,7 @@ type lockFreeSinglyLinkedListNode struct {
 }
 
 // lockFreeSinglyLinkedList 无锁的单链表。
+// 实现限制不能pop唯一的元素。
 type lockFreeSinglyLinkedList struct {
 	// leftNode 链表的开始位置。最左边的节点。
 	// 最左边节点永远是占位节点。
