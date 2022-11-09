@@ -5,15 +5,7 @@ import (
 	"sync/atomic"
 )
 
-type bagEntry struct {
-	p interface{}
-
-	deleted uint32
-}
-
-var bagEntryPool = sync.Pool{New: func() interface{} {
-	return &bagEntry{}
-}}
+var deletedBagEntry = new(interface{})
 
 // Bag 并发安全的容量。支持添加、删除、（不保证顺序的）遍历。
 type Bag struct {
@@ -38,13 +30,9 @@ func NewBag() *Bag {
 
 // Add 添加一个元素，返回删除这个元素的函数。
 func (bag *Bag) Add(p interface{}) (delete func()) {
-	entry := bagEntryPool.Get().(*bagEntry)
-	entry.p = p
-	entry.deleted = 0
-
 	store, _ := bag.store.Load().(*lockFreeSlice)
 	if store != nil {
-		if index, ok := store.Append(entry); ok {
+		if index, ok := store.Append(p); ok {
 			return bag.deleteFunc(index)
 		}
 
@@ -56,8 +44,7 @@ func (bag *Bag) Add(p interface{}) (delete func()) {
 			store, _ = bag.store.Load().(*lockFreeSlice)
 
 			index := recycled.(int)
-			oldEntry := store.UpdateAt(index, entry)
-			bagEntryPool.Put(oldEntry)
+			store.UpdateAt(index, p)
 			return bag.deleteFunc(index)
 		}
 	}
@@ -77,7 +64,7 @@ func (bag *Bag) Add(p interface{}) (delete func()) {
 		previous := store
 		store = bag.store.Load().(*lockFreeSlice)
 		if store != previous {
-			if index, ok := store.Append(entry); ok {
+			if index, ok := store.Append(p); ok {
 				return bag.deleteFunc(index)
 			}
 		}
@@ -85,7 +72,7 @@ func (bag *Bag) Add(p interface{}) (delete func()) {
 
 	// 增加容量后再append
 	newStore := store.Grow()
-	index, ok := newStore.Append(entry)
+	index, ok := newStore.Append(p)
 	if !ok {
 		panic("impossibility")
 	}
@@ -106,8 +93,8 @@ func (bag *Bag) deleteAt(index int) {
 		panic("empty bag")
 	}
 
-	entry := store.Load(index).(*bagEntry)
-	if atomic.CompareAndSwapUint32(&entry.deleted, 0, 1) {
+	old := store.UpdateAt(index, deletedBagEntry)
+	if old != deletedBagEntry {
 		bag.indexPool.RightPush(index)
 	}
 }
@@ -119,10 +106,9 @@ func (bag *Bag) Range(f func(p interface{}) (stopIteration bool)) {
 		return
 	}
 	store.Range(func(index int, p interface{}) (stopIteration bool) {
-		entry := p.(*bagEntry)
-		if atomic.LoadUint32(&entry.deleted) == 0 {
-			return f(entry.p)
+		if p == deletedBagEntry {
+			return false
 		}
-		return false
+		return f(p)
 	})
 }

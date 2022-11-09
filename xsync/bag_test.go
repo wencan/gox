@@ -123,3 +123,52 @@ func TestBagConcurrentlyUpdate(t *testing.T) {
 	}
 	assert.Equal(t, want, all)
 }
+
+func TestBagConcurrentlyUpdateAndRange(t *testing.T) {
+	bag := NewBag()
+	big := 50000
+
+	// 并发添加/删除
+	var wg sync.WaitGroup
+	delFuncChans := make(chan func(), big)
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			for _, num := range rand.Perm(big) {
+				delFunc := bag.Add(num)
+				delFuncChans <- delFunc
+
+				delFunc = <-delFuncChans
+				delFunc()
+			}
+		}()
+	}
+
+	done := false
+	go func() {
+		wg.Wait()
+		done = true
+	}()
+
+	var wg2 sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg2.Add(1)
+		go func() {
+			defer wg2.Done()
+
+			for {
+				if done {
+					return
+				}
+
+				bag.Range(func(p interface{}) (stopIteration bool) {
+					_ = p.(int)
+					return false
+				})
+			}
+		}()
+	}
+	wg2.Wait()
+}
