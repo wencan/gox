@@ -8,14 +8,14 @@ import (
 type lockFreeSinglyLinkedListNode struct {
 	value atomic.Value
 
-	next atomic.Value // *lockFreeSListNode
+	next atomic.Value // *lockFreeSinglyLinkedListNode
 
 	// placeholder 占位节点。
 	placeholder bool
 }
 
 // lockFreeSinglyLinkedList 无锁的单链表。
-// 实现限制不能pop唯一的元素。
+// 限制：不能pop唯一的元素，链表内元素类型必须一致。
 type lockFreeSinglyLinkedList struct {
 	// leftNode 链表的开始位置。最左边的节点。
 	// 最左边节点永远是占位节点。
