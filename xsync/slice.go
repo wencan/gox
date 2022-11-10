@@ -28,7 +28,7 @@ type lockFreeSlice struct {
 
 	// capacity 总容量。
 	// lockFreeSlice对象内的容量不会发生变化。
-	capacity int
+	capacity int64
 
 	// length 实际占用的总长度，标示新追加元素的位置。
 	length *uint64
@@ -69,7 +69,7 @@ func (s *lockFreeSlice) Grow() *lockFreeSlice {
 	newSlice := &lockFreeSlice{
 		arrays:   append(s.arrays, tail),
 		entries:  append(s.entries, entries),
-		capacity: s.capacity + len(tail),
+		capacity: s.capacity + int64(tailCapacity),
 		length:   s.length,
 	}
 	return newSlice
