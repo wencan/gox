@@ -6,7 +6,8 @@ import (
 
 // lockFreeSinglyLinkedListNode 无锁单链表的节点。
 type lockFreeSinglyLinkedListNode struct {
-	value atomic.Value
+	// value 数据元素。不会更新。
+	value interface{}
 
 	next atomic.Value // *lockFreeSinglyLinkedListNode
 
@@ -52,7 +53,7 @@ func (slist *lockFreeSinglyLinkedList) LeftPop() (p interface{}, ok bool) {
 			return nil, false
 		}
 		if slist.leftNode.next.CompareAndSwap(next, nextNext) {
-			return next.value.Load(), true
+			return next.value, true
 		}
 		// 其它过程也在pop。重试
 	}
@@ -61,7 +62,7 @@ func (slist *lockFreeSinglyLinkedList) LeftPop() (p interface{}, ok bool) {
 // RightPush 添加一个元素到最左边。
 func (slist *lockFreeSinglyLinkedList) RightPush(p interface{}) {
 	node := &lockFreeSinglyLinkedListNode{}
-	node.value.Store(p)
+	node.value = p
 
 	for {
 		rightNode := slist.followRightNode()
@@ -95,5 +96,5 @@ func (slist *lockFreeSinglyLinkedList) RightPeek() interface{} {
 	if right == nil {
 		return nil
 	}
-	return right.value.Load()
+	return right.value
 }
