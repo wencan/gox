@@ -5,41 +5,31 @@ import (
 	"sync/atomic"
 )
 
-// lockFreeSliceEntry 存在atomic.Value的是*lockFreeSliceEntry。
-// lockFreeSliceEntry指针为nil，表示还未初始化；lockFreeSliceEntry.p为nil，表示用户存了一个数据nil。
-// atomic.Value不支持存nil，不支持更新不同类型的值，使用lockFreeSliceEntry，绕过了atomic.Value的限制。
-type lockFreeSliceEntry struct {
-	p interface{}
-}
-
-var lockFreeSliceEntryPool = sync.Pool{New: func() interface{} {
-	return &lockFreeSliceEntry{}
-}}
-
 // lockFreeSlice 无锁slice实现。
 // 增加容量时，通过grow函数创建一个新的lockFreeSlice对象。
 type lockFreeSlice struct {
-	// arrays 存放数据的二维切片，第二维由数组转换来。lockFreeSlice对象的arrays数据不变，变的是atomic.Value内的值。
-	// grow时，创建一个新的arrays，拷贝原arrays，追加新数组。
-	arrays [][]atomic.Value
+	// limitedSlices 由多个lockFreeLimitedSlice组成。
+	// lockFreeSlice对象内的limitedSlices不会变。变的是lockFreeLimitedSlice内部数据。
+	limitedSlices []*lockFreeLimitedSlice
 
-	// entries 每次Grow时，预分配一批lockFreeSliceEntry，优化内存。
-	entries [][]lockFreeSliceEntry
+	// limitSlicesNum limitedSlices数量。
+	// lockFreeSlice对象内的limitedSlices数量不会发生变化。
+	limitSlicesNum int
+
+	// slicesStartIndex g
+	slicesStartIndex []int
 
 	// capacity 总容量。
 	// lockFreeSlice对象内的容量不会发生变化。
-	capacity int64
-
-	// length 实际占用的总长度，标示新追加元素的位置。
-	length *uint64
+	capacity int
 }
 
 // Grow 返回一个新的容量更大的lockFreeSlice对象，新lockFreeSlice对象会拥有原数组和新数组。
 func (s *lockFreeSlice) Grow() *lockFreeSlice {
 	// 最后一个数组的容量
 	var lastCapacity int
-	if len(s.arrays) > 0 {
-		lastCapacity = len(s.arrays[len(s.arrays)-1])
+	if len(s.limitedSlices) > 0 {
+		lastCapacity = s.limitedSlices[len(s.limitedSlices)-1].Capacity()
 	}
 
 	// 新数组
@@ -62,15 +52,15 @@ func (s *lockFreeSlice) Grow() *lockFreeSlice {
 	default:
 		tailCapacity = 1024
 	}
-	tail := make([]atomic.Value, tailCapacity)
-	entries := make([]lockFreeSliceEntry, tailCapacity) // 优化内存
+
+	tailLimitedSlice := newLockFreeLimitedSlice(tailCapacity)
 
 	// 新slice
 	newSlice := &lockFreeSlice{
-		arrays:   append(s.arrays, tail),
-		entries:  append(s.entries, entries),
-		capacity: s.capacity + int64(tailCapacity),
-		length:   s.length,
+		limitedSlices:    append(s.limitedSlices, tailLimitedSlice),
+		limitSlicesNum:   len(s.limitedSlices) + 1,
+		slicesStartIndex: append(s.slicesStartIndex, s.capacity),
+		capacity:         s.capacity + tailCapacity,
 	}
 	return newSlice
 }
@@ -113,88 +103,43 @@ func slicesPostion(index int) (int, int) {
 // 如果成功，返回下标。
 // 如果失败，表示该grow了。
 func (s *lockFreeSlice) Append(p interface{}) (int, bool) {
-	if s.length == nil {
-		// 还没初始化
+	if s.limitSlicesNum == 0 {
+		return 0, false
+	}
+	index2d, ok := s.limitedSlices[s.limitSlicesNum-1].Append(p)
+	if !ok {
 		return 0, false
 	}
 
-	for {
-		index := atomic.LoadUint64(s.length)
-		if index+1 > uint64(s.capacity) {
-			return 0, false
-		}
-
-		if atomic.CompareAndSwapUint64(s.length, index, index+1) {
-			index1d, index2d := slicesPostion(int(index))
-
-			// 这里需要警惕，length增长了，但数据还没存进去。
-			// 等到Store完成，才算Append结束。
-
-			entry := &s.entries[index1d][index2d]
-			entry.p = p
-			s.arrays[index1d][index2d].Store(entry)
-			return int(index), true
-		}
-	}
+	return s.slicesStartIndex[s.limitSlicesNum-1] + index2d, true
 }
 
 // Load 根据下标取回一个元素。
 func (s *lockFreeSlice) Load(index int) interface{} {
 	index1d, index2d := slicesPostion(index)
-	entry := s.arrays[index1d][index2d].Load().(*lockFreeSliceEntry)
-	return entry.p
+	return s.limitedSlices[index1d].Load(index2d)
 }
 
 // UpdateAt 更新下标位置上的元素，返回旧值。
 func (s *lockFreeSlice) UpdateAt(index int, p interface{}) (old interface{}) {
 	index1d, index2d := slicesPostion(index)
-
-	newEntry := lockFreeSliceEntryPool.Get().(*lockFreeSliceEntry)
-	newEntry.p = p
-	oldVal := s.arrays[index1d][index2d].Swap(newEntry)
-	oldEntry := oldVal.(*lockFreeSliceEntry)
-	old = oldEntry.p
-	lockFreeSliceEntryPool.Put(oldEntry)
-	return old
+	return s.limitedSlices[index1d].UpdateAt(index2d, p)
 }
 
 // Range 遍历。
 func (s *lockFreeSlice) Range(f func(index int, p interface{}) (stopIteration bool)) {
-	if s.length == nil {
-		return
-	}
-
-	var index int
-	length := int(atomic.LoadUint64(s.length))
-	for _, array := range s.arrays {
-		for _, value := range array {
-			if index >= length {
-				return
-			}
-
-			val := value.Load()
-			if val == nil {
-				// lenght增长了，但数据还没存进去
-				break
-			}
-			entry := val.(*lockFreeSliceEntry)
-			stopIteration := f(index, entry.p)
-			if stopIteration {
-				return
-			}
-
-			index++
+	var stop bool
+	for index1d, limitedSlice := range s.limitedSlices {
+		if stop {
+			break
 		}
-	}
-}
 
-// Length 返回长度。
-// 在并发Append的场景下，这个长度并不可靠。因为Append时，先增加长度，再存数据。可能长度增加了，对应的数据还没存。
-func (s *lockFreeSlice) Length() int {
-	if s.length == nil {
-		return 0
+		limitedSlice.Range(func(index2d int, p interface{}) (stopIteration bool) {
+			index := s.slicesStartIndex[index1d] + index2d
+			stop := f(index, p)
+			return stop
+		})
 	}
-	return int(atomic.LoadUint64(s.length))
 }
 
 // Slice 并发安全的Slice结构。
@@ -223,8 +168,7 @@ func (slice *Slice) Append(p interface{}) int {
 		// 初始化
 		store, _ = slice.store.Load().(*lockFreeSlice)
 		if store == nil {
-			var length uint64
-			store = &lockFreeSlice{length: &length}
+			store = &lockFreeSlice{}
 			slice.store.Store(store)
 		}
 	} else {
@@ -266,15 +210,15 @@ func (slice *Slice) Range(f func(index int, p interface{}) (stopIteration bool))
 	store.Range(f)
 }
 
-// Length 长度。
-// 在并发Append的场景下，这个长度并不可靠。因为Append时，先增加长度，再存数据。可能长度增加了，对应的数据还没存。
-func (slice *Slice) Length() int {
-	store, _ := slice.store.Load().(*lockFreeSlice)
-	if store == nil {
-		return 0
-	}
-	return store.Length()
-}
+// // Length 长度。
+// // 在并发Append的场景下，这个长度并不可靠。因为Append时，先增加长度，再存数据。可能长度增加了，对应的数据还没存。
+// func (slice *Slice) Length() int {
+// 	store, _ := slice.store.Load().(*lockFreeSlice)
+// 	if store == nil {
+// 		return 0
+// 	}
+// 	return store.Length()
+// }
 
 // UpdateAt 更新下标位置上的值，返回旧值。
 func (slice *Slice) UpdateAt(index int, p interface{}) (old interface{}) {

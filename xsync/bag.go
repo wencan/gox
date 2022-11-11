@@ -57,8 +57,7 @@ func (bag *Bag) Add(p interface{}) int {
 		// 初始化
 		store, _ = bag.store.Load().(*lockFreeSlice)
 		if store == nil {
-			var length uint64
-			store = &lockFreeSlice{length: &length}
+			store = &lockFreeSlice{}
 			bag.store.Store(store)
 		}
 	} else {
