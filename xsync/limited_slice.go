@@ -42,7 +42,7 @@ func newLockFreeLimitedSlice(capacity int) *lockFreeLimitedSlice {
 }
 
 // Capacity
-func (slice lockFreeLimitedSlice) Capacity() int {
+func (slice *lockFreeLimitedSlice) Capacity() int {
 	return slice.capacity
 }
 
@@ -87,12 +87,8 @@ func (slice *lockFreeLimitedSlice) UpdateAt(index int, p interface{}) (old inter
 // Range 遍历。
 func (slice *lockFreeLimitedSlice) Range(f func(index int, p interface{}) (stopIteration bool)) {
 	length := int(atomic.LoadUint64(&slice.nextAppendIndex))
-	for index, value := range slice.array {
-		if index >= length {
-			break
-		}
-
-		val := value.Load()
+	for index := 0; index < length; index++ {
+		val := slice.array[index].Load()
 		if val == nil {
 			// nextAppendIndex增长了，但数据还没存进去
 			continue
