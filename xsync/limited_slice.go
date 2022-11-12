@@ -1,7 +1,6 @@
 package xsync
 
 import (
-	"sync"
 	"sync/atomic"
 )
 
@@ -11,10 +10,6 @@ import (
 type lockFreeLimitedSliceEntry struct {
 	p interface{}
 }
-
-var lockFreeLimitedSliceEntryPool = sync.Pool{New: func() interface{} {
-	return &lockFreeLimitedSliceEntry{}
-}}
 
 // lockFreeLimitedSlice 长度受限的Slice。
 type lockFreeLimitedSlice struct {
@@ -75,13 +70,12 @@ func (slice *lockFreeLimitedSlice) Load(index int) interface{} {
 
 // UpdateAt 更新下标位置上的元素，返回旧值。
 func (slice *lockFreeLimitedSlice) UpdateAt(index int, p interface{}) (old interface{}) {
-	newEntry := lockFreeLimitedSliceEntryPool.Get().(*lockFreeLimitedSliceEntry)
-	newEntry.p = p
+	newEntry := &lockFreeLimitedSliceEntry{p: p}
 	oldVal := slice.array[index].Swap(newEntry)
+	// 不能回收Swap返回的entry。
+	// 因为可能另一个过程刚刚拿到这个entry。
 	oldEntry := oldVal.(*lockFreeLimitedSliceEntry)
-	old = oldEntry.p
-	lockFreeLimitedSliceEntryPool.Put(oldEntry)
-	return old
+	return oldEntry.p
 }
 
 // Range 遍历。
