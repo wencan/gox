@@ -126,3 +126,75 @@ func Test_lockFreeLimitedSlice_ConcurrentlyLoad(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestLockFreeLimitedSlice_concurrentlyAppendLoadUpdateRange(t *testing.T) {
+	big := 1000000
+	slice := newLockFreeLimitedSlice(big)
+
+	ch := make(chan int, big)
+	rand.Seed(time.Now().UnixNano())
+	for _, num := range rand.Perm(big) {
+		ch <- num
+	}
+	close(ch)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			for {
+				num, ok := <-ch
+				if !ok {
+					return
+				}
+
+				index, ok := slice.Append(num)
+				assert.True(t, ok)
+
+				// 将value更新为index值，方便后面检查
+				old := slice.UpdateAt(index, index)
+				assert.Equal(t, old, num)
+
+				got := slice.Load(index).(int)
+				assert.Equal(t, index, got)
+			}
+		}()
+	}
+
+	closeFlag := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(closeFlag)
+	}()
+
+	var wg2 sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg2.Add(1)
+		go func() {
+			defer wg2.Done()
+
+			for {
+				select {
+				case <-closeFlag:
+					return
+				default:
+				}
+
+				slice.Range(func(index int, p interface{}) (stopIteration bool) {
+					_ = p.(int)
+					return false
+				})
+			}
+		}()
+	}
+	wg2.Wait()
+
+	// 最后再检查一遍
+	slice.Range(func(index int, p interface{}) (stopIteration bool) {
+		num := p.(int)
+		assert.Equal(t, index, num)
+		return false
+	})
+}
