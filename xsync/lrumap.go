@@ -2,6 +2,7 @@ package xsync
 
 import (
 	"sync"
+	"sync/atomic"
 )
 
 type lruMapEntry struct {
@@ -13,6 +14,9 @@ type lruMapEntry struct {
 
 	// chunk 所在区块。
 	chunk *lockFreeLimitedSlice
+
+	// upgradeLock upgradeEntry函数内的锁。0为开锁，1为解锁。
+	upgradeLock uint32
 }
 
 var lruMapEntryPool = sync.Pool{New: func() interface{} {
@@ -79,6 +83,13 @@ func (m *LRUMap) Store(key interface{}, value interface{}) {
 
 // upgradeEntry 存放到最新的区块。如果已经是在最新的区块，什么也不干。
 func (m *LRUMap) upgradeEntry(entry *lruMapEntry) {
+	// 先尝试上锁。因为下面会并发读写entry.chunk。
+	// 如果没抢占到锁，结束。不需要同时重复upgrade entry。
+	if !atomic.CompareAndSwapUint32(&entry.upgradeLock, 0, 1) {
+		return
+	}
+	defer atomic.StoreUint32(&entry.upgradeLock, 0)
+
 	topChunk, _ := m.chunks.RightPeek().(*lockFreeLimitedSlice)
 	if topChunk != nil {
 		if topChunk == entry.chunk {
