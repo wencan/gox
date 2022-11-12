@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -131,7 +132,7 @@ func TestBagConcurrentlyUpdateAndRange(t *testing.T) {
 	// 并发添加/删除
 	var wg sync.WaitGroup
 	delIndexChans := make(chan int, big)
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -146,20 +147,20 @@ func TestBagConcurrentlyUpdateAndRange(t *testing.T) {
 		}()
 	}
 
-	done := false
+	var done uint64
 	go func() {
 		wg.Wait()
-		done = true
+		atomic.StoreUint64(&done, 1)
 	}()
 
 	var wg2 sync.WaitGroup
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 50; i++ {
 		wg2.Add(1)
 		go func() {
 			defer wg2.Done()
 
 			for {
-				if done {
+				if atomic.LoadUint64(&done) == 1 {
 					return
 				}
 
