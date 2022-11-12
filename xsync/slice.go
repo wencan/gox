@@ -16,7 +16,7 @@ type lockFreeSlice struct {
 	// lockFreeSlice对象内的limitedSlices数量不会发生变化。
 	limitSlicesNum int
 
-	// slicesStartIndex g
+	// slicesStartIndex 每个lockFreeLimitedSlice的起始索引。
 	slicesStartIndex []int
 
 	// capacity 总容量。
