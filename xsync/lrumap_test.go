@@ -134,11 +134,11 @@ func TestLRUMap_LoadFirstChunk(t *testing.T) {
 }
 
 func TestLRUMap_ConcurrentlyStore(t *testing.T) {
-	m := NewLRUMap(10000, 500)
+	m := NewLRUMap(10000, 200)
 
 	var wg sync.WaitGroup
-	wg.Add(500)
-	for i := 0; i < 500; i++ {
+	wg.Add(200)
+	for i := 0; i < 200; i++ {
 		go func(_i int) {
 			defer wg.Done()
 
@@ -149,7 +149,7 @@ func TestLRUMap_ConcurrentlyStore(t *testing.T) {
 	}
 	wg.Wait()
 
-	for i := 0; i < 500*10000; i++ {
+	for i := 0; i < 200*10000; i++ {
 		value, _, ok := m.SilentLoad(i)
 		if assert.True(t, ok) {
 			num := value.(int)
@@ -161,28 +161,30 @@ func TestLRUMap_ConcurrentlyStore(t *testing.T) {
 }
 
 func TestLRUMap_ConcurrentlyLoad(t *testing.T) {
-	m := NewLRUMap(10000, 500)
+	m := NewLRUMap(10000, 200)
 
 	// 先塞满
-	for i := 0; i < 500*10000; i++ {
+	for i := 0; i < 200*10000; i++ {
 		m.Store(i, i)
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(500)
-	for i := 0; i < 500; i++ {
+	wg.Add(200)
+	for i := 0; i < 200; i++ {
 		go func() {
 			defer wg.Done()
 
 			for j := 0; j < 10; j++ {
 				// 只读最后一个区块
 				// 前面的会被淘汰掉
-				for k := 499 * 10000; k < 500*10000; k++ {
+				for k := 199 * 10000; k < 200*10000; k++ {
 					value, ok := m.Load(k)
 					if assert.True(t, ok, "index: %d", k) {
 						num := value.(int)
 						if num != k {
-							assert.Equal(t, k, num)
+							if !assert.Equal(t, k, num) {
+								return
+							}
 						}
 					}
 				}
@@ -196,8 +198,8 @@ func TestLRUMap_ConcurrentlyStoreAndLoad(t *testing.T) {
 	m := NewLRUMap(100000, 1000)
 
 	var wg sync.WaitGroup
-	wg.Add(500)
-	for i := 0; i < 500; i++ {
+	wg.Add(200)
+	for i := 0; i < 200; i++ {
 		go func() {
 			defer wg.Done()
 
