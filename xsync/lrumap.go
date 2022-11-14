@@ -13,15 +13,8 @@ type lruMapEntry struct {
 	value interface{}
 
 	// chunk 所在区块。
-	chunk *lockFreeLimitedSlice
-
-	// upgradeLock upgradeEntry函数内的锁。0为开锁，1为解锁。
-	upgradeLock uint32
+	chunk atomic.Value //*lockFreeLimitedSlice
 }
-
-var lruMapEntryPool = sync.Pool{New: func() interface{} {
-	return &lruMapEntry{}
-}}
 
 // LRUMap 只持有最近使用元素的map。并发安全。
 // 按批次（区块）清理长期不用的元素。
@@ -43,8 +36,11 @@ type LRUMap struct {
 	// chunkCount 区块计数。
 	chunkCount int
 
-	// mu 锁。创建新区块，需要加锁。
-	mu sync.Mutex
+	// chunksLock 创建新区块，需要加锁。
+	chunksLock sync.Mutex
+
+	// rwLock 存新数据时，用可重入的读锁；清理数据时，用不可重入的写锁。
+	rwLock sync.RWMutex
 
 	// onEvicted 元素被清理时，回调该函数。可用于回收资源。
 	onEvicted func(k, v interface{})
@@ -59,6 +55,7 @@ func NewLRUMap(chunkCapacity int, chunkNum int) *LRUMap {
 // NewLRUMapWithEvict 创建LRUMap。
 // 总容量为chunkCapacity*chunkNum。
 // 当最近不用的元素和被覆盖的元素被清理时，onEvicted函数将被回调。
+// 被覆盖的kv对，被清理时，也会回调onEvicted函数。
 func NewLRUMapWithEvict(chunkCapacity int, chunkNum int, onEvicted func(key, value interface{})) *LRUMap {
 	return &LRUMap{
 		chunks:        newLockFreeSinglyLinkedList(),
@@ -71,35 +68,47 @@ func NewLRUMapWithEvict(chunkCapacity int, chunkNum int, onEvicted func(key, val
 // Store 存储数据。记录元素到最新区块。
 // 被覆盖的value会跟随最近不用的value，等待被清理。
 func (m *LRUMap) Store(key interface{}, value interface{}) {
-	entry := lruMapEntryPool.Get().(*lruMapEntry)
-	entry.key = key
-	entry.value = value
-	entry.chunk = nil
+	entry := &lruMapEntry{
+		key:   key,
+		value: value,
+	}
 
+	m.rwLock.RLock() // 可重入的锁
 	m.mapping.Store(key, entry)
+	m.rwLock.RUnlock()
 
 	m.upgradeEntry(entry)
 }
 
-// upgradeEntry 存放到最新的区块。如果已经是在最新的区块，什么也不干。
+// upgradeEntry 存放到最新的区块，可能删除最老的区块。如果已经是在最新的区块，什么也不干。
 func (m *LRUMap) upgradeEntry(entry *lruMapEntry) {
-	// 先尝试上锁。因为下面会并发读写entry.chunk。
-	// 如果没抢占到锁，结束。不需要同时重复upgrade entry。
-	if !atomic.CompareAndSwapUint32(&entry.upgradeLock, 0, 1) {
-		return
+	coveredChunk := m.putInTopChunk(entry)
+	if coveredChunk != nil {
+		m.deleteCoveredChunk(coveredChunk)
 	}
-	defer atomic.StoreUint32(&entry.upgradeLock, 0)
+}
+
+// putInTopChunk  存放到最新的区块。如果最新区块已满，创建新的区块。
+func (m *LRUMap) putInTopChunk(entry *lruMapEntry) (coveredChunk *lockFreeLimitedSlice) {
+	currentChunk, _ := entry.chunk.Load().(*lockFreeLimitedSlice)
 
 	topChunk, _ := m.chunks.RightPeek().(*lockFreeLimitedSlice)
 	if topChunk != nil {
-		if topChunk == entry.chunk {
+		if topChunk == currentChunk {
 			// 如果已经是最新的区块
 			return
 		}
 
 		// 尝试存到最新区块
+		var old interface{}
+		if currentChunk != nil {
+			old = currentChunk
+		}
+		if !entry.chunk.CompareAndSwap(old, topChunk) {
+			// 有另一路并发过程在更新entry
+			return
+		}
 		// 如果失败，表示最新区块满了
-		entry.chunk = topChunk
 		if _, ok := topChunk.Append(entry); ok {
 			return
 		}
@@ -107,63 +116,74 @@ func (m *LRUMap) upgradeEntry(entry *lruMapEntry) {
 
 	// 最新的区块已满，或者还没创建区块。
 	// 加锁，然后新增区块。
-	var covered interface{}
-	func() {
-		m.mu.Lock()
-		defer m.mu.Unlock()
+	m.chunksLock.Lock()
+	defer m.chunksLock.Unlock()
 
-		// 二次检查
-		preTopChunk := topChunk
-		topChunk, _ := m.chunks.RightPeek().(*lockFreeLimitedSlice)
-		if topChunk != nil && topChunk != preTopChunk {
-			entry.chunk = topChunk
-			if _, ok := topChunk.Append(entry); ok {
-				return
-			}
-		}
-
-		// 创建新的区块，然后再存
-		chunk := newLockFreeLimitedSlice(m.chunkCapacity)
-		entry.chunk = chunk
-		if _, ok := chunk.Append(entry); !ok {
-			panic("impossibility")
-		}
-		m.chunks.RightPush(chunk)
-		m.chunkCount++
-
-		if m.chunkCount > m.chunkNumLimit {
-			p, _ := m.chunks.LeftPop()
-			covered, _ = p.(*lockFreeLimitedSlice)
-			m.chunkCount--
-		}
-	}()
-
-	// 清理最后一个区块
-	// 这块不需要加锁。
-	if covered != nil {
-		coveredChunk, _ := covered.(*lockFreeLimitedSlice)
-		if coveredChunk != nil {
-			for i := 0; i < m.chunkCapacity; i++ {
-				entry, _ := coveredChunk.Load(i).(*lruMapEntry)
-				if entry != nil {
-					v, ok := m.mapping.Load(entry.key)
-					if ok { // 如果清理其它区块时，被清理掉了，就会 !ok
-						storedEntry := v.(*lruMapEntry)
-						if storedEntry.chunk == coveredChunk { // 如果不相等，表示已经更新
-							// 这里，storedEntry 和 entry 是同一指针
-							m.mapping.Delete(entry.key)
-						}
-					}
-					// 回调通知
-					if m.onEvicted != nil {
-						m.onEvicted(entry.key, entry.value)
-					}
-					// 释放lruMapEntry对象
-					lruMapEntryPool.Put(entry)
-				}
-			}
+	// 二次检查
+	preTopChunk := topChunk
+	topChunk, _ = m.chunks.RightPeek().(*lockFreeLimitedSlice)
+	if topChunk != nil && topChunk != preTopChunk {
+		entry.chunk.Store(topChunk)
+		if _, ok := topChunk.Append(entry); ok {
+			return
 		}
 	}
+
+	// 创建新的区块，然后再存
+	chunk := newLockFreeLimitedSlice(m.chunkCapacity)
+	entry.chunk.Store(chunk)
+	if _, ok := chunk.Append(entry); !ok {
+		panic("impossibility")
+	}
+	m.chunks.RightPush(chunk)
+	m.chunkCount++
+
+	if m.chunkCount > m.chunkNumLimit {
+		p, _ := m.chunks.LeftPop()
+		coveredChunk, _ = p.(*lockFreeLimitedSlice)
+		m.chunkCount--
+	}
+
+	return coveredChunk
+}
+
+// deleteCoveredChunk 删除最老的区块。
+func (m *LRUMap) deleteCoveredChunk(coveredChunk *lockFreeLimitedSlice) {
+	m.rwLock.Lock()
+	defer m.rwLock.Unlock()
+
+	coveredChunk.Range(func(index int, p interface{}) (stopIteration bool) {
+		entry, _ := p.(*lruMapEntry)
+		if entry == nil {
+			return false
+		}
+
+		v, ok := m.mapping.Load(entry.key)
+		if !ok {
+			// 清理其它区块时，被清理掉了
+			return false
+		}
+
+		storedEntry := v.(*lruMapEntry)
+		currentChunk := storedEntry.chunk.Load().(*lockFreeLimitedSlice)
+		covered := currentChunk != coveredChunk // 如果不相等，表示已经被覆盖
+		if !covered {
+			// 仅当没被覆盖时删除key，不然会删除最新的kv对。
+			// 这里，storedEntry 和 entry 是同一指针
+			// 从mapping.Load后到mapping.Delete这个区间要加锁。
+			// 如果mapping.Load后到mapping.Delete前，key被重新Store，删除的就会是新的kv对
+			m.mapping.Delete(entry.key)
+		}
+		// 回调通知
+		if m.onEvicted != nil {
+			m.onEvicted(entry.key, entry.value)
+		}
+
+		// 清理的entry可能正被LRUMap.Load程序加载。
+		// 否则，可以回收entry。
+
+		return false
+	})
 }
 
 // Load 查找元素。如果找到，记录元素到最新区块。

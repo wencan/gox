@@ -34,7 +34,7 @@ func TestLRUMap(t *testing.T) {
 	// 已经清理的部分
 	for i := 0; i < 10; i++ {
 		_, _, ok := m.SilentLoad(i)
-		assert.False(t, ok)
+		assert.False(t, ok, "index: %d", i)
 	}
 	// 还在的部分
 	for i := 10; i < 10*10+10; i++ {
