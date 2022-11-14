@@ -55,7 +55,6 @@ func NewLRUMap(chunkCapacity int, chunkNum int) *LRUMap {
 // NewLRUMapWithEvict 创建LRUMap。
 // 总容量为chunkCapacity*chunkNum。
 // 当最近不用的元素和被覆盖的元素被清理时，onEvicted函数将被回调。
-// 被覆盖的kv对，被清理时，也会回调onEvicted函数。
 func NewLRUMapWithEvict(chunkCapacity int, chunkNum int, onEvicted func(key, value interface{})) *LRUMap {
 	return &LRUMap{
 		chunks:        newLockFreeSinglyLinkedList(),
