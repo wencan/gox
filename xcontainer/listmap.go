@@ -15,12 +15,14 @@ var listEntryPool = sync.Pool{New: func() interface{} {
 }}
 
 // ListMap 同时具备List和Map的特性。
+// 非并发安全。
 // 来自：https://github.com/wencan/cachex。
 type ListMap struct {
 	sequence *list.List
 	mapping  map[interface{}]*list.Element
 }
 
+// NewListMap 新建一个NewListMap。
 func NewListMap() *ListMap {
 	return &ListMap{
 		sequence: list.New(),
@@ -28,6 +30,7 @@ func NewListMap() *ListMap {
 	}
 }
 
+// Get 根据key获取一个值。
 func (m *ListMap) Get(key interface{}) (value interface{}, ok bool) {
 	elem, ok := m.mapping[key]
 	if ok {
@@ -37,6 +40,7 @@ func (m *ListMap) Get(key interface{}) (value interface{}, ok bool) {
 	return nil, false
 }
 
+// Pop 根据key获取并删除一个值。
 func (m *ListMap) Pop(key interface{}) (value interface{}, ok bool) {
 	elem, ok := m.mapping[key]
 	if ok {
@@ -53,10 +57,12 @@ func (m *ListMap) Pop(key interface{}) (value interface{}, ok bool) {
 	return nil, false
 }
 
+// Len 长度。
 func (m *ListMap) Len() int {
 	return m.sequence.Len()
 }
 
+// Front 最前的值。
 func (m *ListMap) Front() (value interface{}, ok bool) {
 	elem := m.sequence.Front()
 	if elem != nil {
@@ -66,6 +72,7 @@ func (m *ListMap) Front() (value interface{}, ok bool) {
 	return nil, false
 }
 
+// Back 最后的值。
 func (m *ListMap) Back() (value interface{}, ok bool) {
 	elem := m.sequence.Back()
 	if elem != nil {
@@ -75,6 +82,7 @@ func (m *ListMap) Back() (value interface{}, ok bool) {
 	return nil, false
 }
 
+// PopFront 获取并删除最前的值。
 func (m *ListMap) PopFront() (value interface{}, ok bool) {
 	elem := m.sequence.Front()
 	if elem != nil {
@@ -91,6 +99,7 @@ func (m *ListMap) PopFront() (value interface{}, ok bool) {
 	return nil, false
 }
 
+// PopBack 获取并删除最后的值。
 func (m *ListMap) PopBack() (value interface{}, ok bool) {
 	elem := m.sequence.Back()
 	if elem != nil {
@@ -107,6 +116,7 @@ func (m *ListMap) PopBack() (value interface{}, ok bool) {
 	return nil, false
 }
 
+// PushFront 新增最前的值。
 func (m *ListMap) PushFront(key interface{}, value interface{}) {
 	entry := listEntryPool.Get().(*listEntry)
 	entry.key = key
@@ -116,6 +126,7 @@ func (m *ListMap) PushFront(key interface{}, value interface{}) {
 	m.mapping[key] = elem
 }
 
+// PushBack 新增最后的值。
 func (m *ListMap) PushBack(key interface{}, value interface{}) {
 	entry := listEntryPool.Get().(*listEntry)
 	entry.key = key
@@ -125,6 +136,7 @@ func (m *ListMap) PushBack(key interface{}, value interface{}) {
 	m.mapping[key] = elem
 }
 
+// MoveToFront 将kv对移到最前。
 func (m *ListMap) MoveToFront(key interface{}) {
 	elem, ok := m.mapping[key]
 	if ok {
@@ -132,6 +144,7 @@ func (m *ListMap) MoveToFront(key interface{}) {
 	}
 }
 
+// MoveToBack 将kv对移到最后。
 func (m *ListMap) MoveToBack(key interface{}) {
 	elem, ok := m.mapping[key]
 	if ok {
@@ -139,6 +152,7 @@ func (m *ListMap) MoveToBack(key interface{}) {
 	}
 }
 
+// Clear 清理全部数据。
 func (m *ListMap) Clear() {
 	for _, elem := range m.mapping {
 		listEntryPool.Put(elem.Value)
