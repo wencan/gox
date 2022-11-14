@@ -90,10 +90,9 @@ func (m *LRUMap) upgradeEntry(entry *lruMapEntry) {
 
 // putInTopChunk  存放到最新的区块。如果最新区块已满，创建新的区块。
 func (m *LRUMap) putInTopChunk(entry *lruMapEntry) (coveredChunk *lockFreeLimitedSlice) {
-	currentChunk, _ := entry.chunk.Load().(*lockFreeLimitedSlice)
-
 	topChunk, _ := m.chunks.RightPeek().(*lockFreeLimitedSlice)
 	if topChunk != nil {
+		currentChunk, _ := entry.chunk.Load().(*lockFreeLimitedSlice)
 		if topChunk == currentChunk {
 			// 如果已经是最新的区块
 			return
@@ -123,6 +122,10 @@ func (m *LRUMap) putInTopChunk(entry *lruMapEntry) (coveredChunk *lockFreeLimite
 	preTopChunk := topChunk
 	topChunk, _ = m.chunks.RightPeek().(*lockFreeLimitedSlice)
 	if topChunk != nil && topChunk != preTopChunk {
+		currentChunk, _ := entry.chunk.Load().(*lockFreeLimitedSlice)
+		if currentChunk == topChunk {
+			return
+		}
 		entry.chunk.Store(topChunk)
 		if _, ok := topChunk.Append(entry); ok {
 			return
