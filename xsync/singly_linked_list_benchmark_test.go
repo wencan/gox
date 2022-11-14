@@ -1,6 +1,9 @@
 package xsync
 
-import "testing"
+import (
+	"sync"
+	"testing"
+)
 
 func BenchmarkSinglyLinkedList_pushAndPop(b *testing.B) {
 	slist := newLockFreeSinglyLinkedList()
@@ -12,7 +15,8 @@ func BenchmarkSinglyLinkedList_pushAndPop(b *testing.B) {
 	b.RunParallel(func(p *testing.PB) {
 		var i int
 		for p.Next() {
-			slist.RightPush(i)
+			n := i
+			slist.RightPush(n)
 			slist.LeftPop()
 
 			i++
@@ -30,8 +34,25 @@ func BenchmarkChannel_pushAndPop(b *testing.B) {
 	b.RunParallel(func(p *testing.PB) {
 		var i int
 		for p.Next() {
-			ch <- i
+			n := i
+			ch <- n
 			<-ch
+
+			i++
+		}
+	})
+}
+
+func BenchmarkSyncPool_putAndGet(b *testing.B) {
+	var pool sync.Pool
+
+	b.ResetTimer()
+	b.RunParallel(func(p *testing.PB) {
+		var i int
+		for p.Next() {
+			n := i
+			pool.Put(&n)
+			pool.Get()
 
 			i++
 		}
