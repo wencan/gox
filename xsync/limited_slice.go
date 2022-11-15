@@ -36,7 +36,7 @@ func newLockFreeLimitedSlice(capacity int) *lockFreeLimitedSlice {
 	}
 }
 
-// Capacity
+// Capacity 容量。
 func (slice *lockFreeLimitedSlice) Capacity() int {
 	return slice.capacity
 }
