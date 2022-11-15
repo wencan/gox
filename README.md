@@ -21,7 +21,7 @@ lockfree数据结构，已经迁往：[freesync](https://github.com/wencan/frees
         <td><a href="https://pkg.go.dev/github.com/wencan/freesync#Bag">Bag</a></td><td>并发安全的容器</td><td>与sync.Map相比，写性能提升一半左右</td>
     </tr>
     <tr>
-        <td rowspan="2">xsync</td><<td><a href="https://pkg.go.dev/github.com/wencan/gox/xsync#LRUMap">LRUMap</a></td><td>并发安全的LRU结构</td><td>与GroupCache的LRU相比，写性能相当，读性能提升近百倍</td>
+        <td rowspan="2">xsync</td><td><a href="https://pkg.go.dev/github.com/wencan/gox/xsync#LRUMap">LRUMap</a></td><td>并发安全的LRU结构</td><td>与GroupCache的LRU相比，写性能相当，读性能提升近百倍</td>
     </tr>
     <tr>
         <td>xsync/sentinel</td><td><a href="https://pkg.go.dev/github.com/wencan/gox/xsync/sentinel#SentinelGroup">SentinelGroup</a></td><td>哨兵机制</td><td>同singleflight，但支持批量处理</td>
