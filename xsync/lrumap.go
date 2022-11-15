@@ -3,6 +3,8 @@ package xsync
 import (
 	"sync"
 	"sync/atomic"
+
+	"github.com/wencan/freesync/lockfree"
 )
 
 type lruMapEntry struct {
@@ -13,7 +15,7 @@ type lruMapEntry struct {
 	value interface{}
 
 	// chunk 所在区块。
-	chunk atomic.Value //*lockFreeLimitedSlice
+	chunk atomic.Value //*lockfree.LimitedSlice
 }
 
 // LRUMap 只持有最近使用元素的map。并发安全。
@@ -25,7 +27,7 @@ type LRUMap struct {
 	mapping sync.Map
 
 	// chunks 按批次记录最近使用的元素entry，一个区块(chunk)存一批记录。
-	chunks *lockFreeSinglyLinkedList
+	chunks *lockfree.SinglyLinkedList
 
 	// chunkCapacity 区块大小。
 	chunkCapacity int
@@ -57,7 +59,7 @@ func NewLRUMap(chunkCapacity int, chunkNum int) *LRUMap {
 // 当最近不用的元素和被覆盖的元素被清理时，onEvicted函数将被回调。
 func NewLRUMapWithEvict(chunkCapacity int, chunkNum int, onEvicted func(key, value interface{})) *LRUMap {
 	return &LRUMap{
-		chunks:        newLockFreeSinglyLinkedList(),
+		chunks:        lockfree.NewSinglyLinkedList(),
 		chunkCapacity: chunkCapacity,
 		chunkNumLimit: chunkNum,
 		onEvicted:     onEvicted,
@@ -88,10 +90,10 @@ func (m *LRUMap) upgradeEntry(entry *lruMapEntry) {
 }
 
 // putInTopChunk  存放到最新的区块。如果最新区块已满，创建新的区块。
-func (m *LRUMap) putInTopChunk(entry *lruMapEntry) (coveredChunk *lockFreeLimitedSlice) {
-	topChunk, _ := m.chunks.RightPeek().(*lockFreeLimitedSlice)
+func (m *LRUMap) putInTopChunk(entry *lruMapEntry) (coveredChunk *lockfree.LimitedSlice) {
+	topChunk, _ := m.chunks.RightPeek().(*lockfree.LimitedSlice)
 	if topChunk != nil {
-		currentChunk, _ := entry.chunk.Load().(*lockFreeLimitedSlice)
+		currentChunk, _ := entry.chunk.Load().(*lockfree.LimitedSlice)
 		if topChunk == currentChunk {
 			// 如果已经是最新的区块
 			return
@@ -119,9 +121,9 @@ func (m *LRUMap) putInTopChunk(entry *lruMapEntry) (coveredChunk *lockFreeLimite
 
 	// 二次检查
 	preTopChunk := topChunk
-	topChunk, _ = m.chunks.RightPeek().(*lockFreeLimitedSlice)
+	topChunk, _ = m.chunks.RightPeek().(*lockfree.LimitedSlice)
 	if topChunk != nil && topChunk != preTopChunk {
-		currentChunk, _ := entry.chunk.Load().(*lockFreeLimitedSlice)
+		currentChunk, _ := entry.chunk.Load().(*lockfree.LimitedSlice)
 		if currentChunk == topChunk {
 			return
 		}
@@ -132,7 +134,7 @@ func (m *LRUMap) putInTopChunk(entry *lruMapEntry) (coveredChunk *lockFreeLimite
 	}
 
 	// 创建新的区块，然后再存
-	chunk := newLockFreeLimitedSlice(m.chunkCapacity)
+	chunk := lockfree.NewLimitedSlice(m.chunkCapacity)
 	entry.chunk.Store(chunk)
 	if _, ok := chunk.Append(entry); !ok {
 		panic("impossibility")
@@ -142,7 +144,7 @@ func (m *LRUMap) putInTopChunk(entry *lruMapEntry) (coveredChunk *lockFreeLimite
 
 	if m.chunkCount > m.chunkNumLimit {
 		p, _ := m.chunks.LeftPop()
-		coveredChunk, _ = p.(*lockFreeLimitedSlice)
+		coveredChunk, _ = p.(*lockfree.LimitedSlice)
 		m.chunkCount--
 	}
 
@@ -150,7 +152,7 @@ func (m *LRUMap) putInTopChunk(entry *lruMapEntry) (coveredChunk *lockFreeLimite
 }
 
 // deleteCoveredChunk 删除最老的区块。
-func (m *LRUMap) deleteCoveredChunk(coveredChunk *lockFreeLimitedSlice) {
+func (m *LRUMap) deleteCoveredChunk(coveredChunk *lockfree.LimitedSlice) {
 	m.rwLock.Lock()
 	defer m.rwLock.Unlock()
 
@@ -167,7 +169,7 @@ func (m *LRUMap) deleteCoveredChunk(coveredChunk *lockFreeLimitedSlice) {
 		}
 
 		storedEntry := v.(*lruMapEntry)
-		currentChunk := storedEntry.chunk.Load().(*lockFreeLimitedSlice)
+		currentChunk := storedEntry.chunk.Load().(*lockfree.LimitedSlice)
 		covered := currentChunk != coveredChunk // 如果不相等，表示已经被覆盖
 		if !covered {
 			// 仅当没被覆盖时删除key，不然会删除最新的kv对。
