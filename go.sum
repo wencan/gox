@@ -14,6 +14,8 @@ github.com/wencan/freesync v0.0.0-20221115052716-b939e362c341 h1:qITpMLeLR0XIsIo
 github.com/wencan/freesync v0.0.0-20221115052716-b939e362c341/go.mod h1:f3tdmXICRZ0WpE8Y/mcXBPrAygIyUnhUtLUXNq3YQ04=
 github.com/wencan/freesync v0.0.0-20221115131648-c593f7fae688 h1:1MfI4RklENDU2KJMIwd6RLJuvekJd3NyvmTDAtj/BSA=
 github.com/wencan/freesync v0.0.0-20221115131648-c593f7fae688/go.mod h1:f3tdmXICRZ0WpE8Y/mcXBPrAygIyUnhUtLUXNq3YQ04=
+github.com/wencan/freesync v0.0.0-20221116002138-ac341bb206c4 h1:NprrDN5cJaARlhikMnppdoGV1AYUsB+wxu+NSKg/96Y=
+github.com/wencan/freesync v0.0.0-20221116002138-ac341bb206c4/go.mod h1:f3tdmXICRZ0WpE8Y/mcXBPrAygIyUnhUtLUXNq3YQ04=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=

@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/stretchr/testify v1.8.1
-	github.com/wencan/freesync v0.0.0-20221115131648-c593f7fae688
+	github.com/wencan/freesync v0.0.0-20221116002138-ac341bb206c4
 )
 
 require (
