@@ -152,6 +152,20 @@ func (m *ListMap) MoveToBack(key interface{}) {
 	}
 }
 
+// Range 从前面开始，遍历所有元素。
+func (m *ListMap) Range(f func(key, value interface{}) (stopIteration bool)) {
+	elem := m.sequence.Front()
+	for elem != nil {
+		entry := elem.Value.(*listEntry)
+		stopIteration := f(entry.key, entry.value)
+		if stopIteration {
+			return
+		}
+
+		elem = elem.Next()
+	}
+}
+
 // Clear 清理全部数据。
 func (m *ListMap) Clear() {
 	for _, elem := range m.mapping {

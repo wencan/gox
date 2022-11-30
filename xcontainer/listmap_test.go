@@ -60,3 +60,36 @@ func TestListMap_MoveToFront(t *testing.T) {
 	assert.Equal(t, t2, v1)
 	assert.Equal(t, t1, v2)
 }
+
+func TestListMap_Range(t *testing.T) {
+	m := NewListMap()
+
+	m.PushFront(1, "1")
+	m.PushBack(2, "2")
+	m.PushFront(0, "0")
+	m.PushBack(3, "3")
+
+	keys := []int{}
+	values := []string{}
+	m.Range(func(key, value interface{}) (stopIteration bool) {
+		keys = append(keys, key.(int))
+		values = append(values, value.(string))
+		return false
+	})
+	assert.Equal(t, []int{0, 1, 2, 3}, keys)
+	assert.Equal(t, []string{"0", "1", "2", "3"}, values)
+
+	keys = []int{}
+	values = []string{}
+	m.Range(func(key, value interface{}) (stopIteration bool) {
+		keys = append(keys, key.(int))
+		values = append(values, value.(string))
+
+		if idx := key.(int); idx >= 2 {
+			return true
+		}
+		return false
+	})
+	assert.Equal(t, []int{0, 1, 2}, keys)
+	assert.Equal(t, []string{"0", "1", "2"}, values)
+}
