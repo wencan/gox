@@ -44,27 +44,33 @@ type LRUMap struct {
 	// rwLock 存新数据时，用可重入的读锁；清理数据时，用不可重入的写锁。
 	rwLock sync.RWMutex
 
+	// onEvicted 被执行时，清理的数据可能正被使用。删除onEvicted。只能让资源等待被回收。
 	// onEvicted 元素被清理时，回调该函数。可用于回收资源。
-	onEvicted func(k, v interface{})
+	// onEvicted func(k, v interface{})
 }
 
 // NewLRUMap 创建LRUMap。
 // 总容量为chunkCapacity*chunkNum。
 func NewLRUMap(chunkCapacity int, chunkNum int) *LRUMap {
-	return NewLRUMapWithEvict(chunkCapacity, chunkNum, nil)
-}
-
-// NewLRUMapWithEvict 创建LRUMap。
-// 总容量为chunkCapacity*chunkNum。
-// 当最近不用的元素和被覆盖的元素被清理时，onEvicted函数将被回调。
-func NewLRUMapWithEvict(chunkCapacity int, chunkNum int, onEvicted func(key, value interface{})) *LRUMap {
+	// return NewLRUMapWithEvict(chunkCapacity, chunkNum, nil)
 	return &LRUMap{
 		chunks:        lockfree.NewSinglyLinkedList(),
 		chunkCapacity: chunkCapacity,
 		chunkNumLimit: chunkNum,
-		onEvicted:     onEvicted,
 	}
 }
+
+// // NewLRUMapWithEvict 创建LRUMap。
+// // 总容量为chunkCapacity*chunkNum。
+// // 当最近不用的元素和被覆盖的元素被清理时，onEvicted函数将被回调。
+// func NewLRUMapWithEvict(chunkCapacity int, chunkNum int, onEvicted func(key, value interface{})) *LRUMap {
+// 	return &LRUMap{
+// 		chunks:        lockfree.NewSinglyLinkedList(),
+// 		chunkCapacity: chunkCapacity,
+// 		chunkNumLimit: chunkNum,
+// 		onEvicted:     onEvicted,
+// 	}
+// }
 
 // Store 存储数据。记录元素到最新区块。
 // 被覆盖的value会跟随最近不用的value，等待被清理。
@@ -178,10 +184,10 @@ func (m *LRUMap) deleteCoveredChunk(coveredChunk *lockfree.LimitedSlice) {
 			// 如果mapping.Load后到mapping.Delete前，key被重新Store，删除的就会是新的kv对
 			m.mapping.Delete(entry.key)
 		}
-		// 回调通知
-		if m.onEvicted != nil {
-			m.onEvicted(entry.key, entry.value)
-		}
+		// // 回调通知
+		// if m.onEvicted != nil {
+		// 	m.onEvicted(entry.key, entry.value)
+		// }
 
 		// 清理的entry可能正被LRUMap.Load程序加载。
 		// 否则，可以回收entry。
