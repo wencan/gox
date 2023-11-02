@@ -27,6 +27,6 @@ lockfree数据结构，已经迁往：[freesync](https://github.com/wencan/frees
         <td>xsync/sentinel</td><td><a href="https://pkg.go.dev/github.com/wencan/gox/xsync/sentinel#SentinelGroup">SentinelGroup</a></td><td>哨兵机制</td><td>同singleflight，但支持批量处理</td>
     </tr>
     <tr>
-        <td><a href="https://pkg.go.dev/github.com/wencan/gox/async">async</a></td><td><a href="https://pkg.go.dev/github.com/wencan/gox/async#Series">Series</a><br><a href="https://pkg.go.dev/github.com/wencan/gox/async#Parallel">Parallel</a></td><td></td><td>协程和异步任务的辅助方法</td>
+        <td><a href="https://pkg.go.dev/github.com/wencan/gox/async">async</a></td><td><a href="https://pkg.go.dev/github.com/wencan/gox/async#Series">Series</a><br><a href="https://pkg.go.dev/github.com/wencan/gox/async#Parallel">Parallel</a><br><a href="https://pkg.go.dev/github.com/wencan/gox/async#Graceful">Graceful</a></td><td></td><td>协程和异步任务的辅助方法</td>
     </tr>
 </table>
