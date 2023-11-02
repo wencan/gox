@@ -49,9 +49,7 @@ func (graceful *Graceful) BusyBranches() []string {
 // Run 新运行一个函数。
 func (graceful *Graceful) Run(f func()) {
 	graceful.counter.Add(1)
-	defer func() {
-		graceful.counter.Add(^uint64(0))
-	}()
+	defer graceful.counter.Add(^uint64(0))
 
 	f()
 }

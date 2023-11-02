@@ -7,19 +7,16 @@ import (
 )
 
 func ExampleGraceful() {
-	go func() {
-		DefaultGraceful.Run(func() {
-			// nothing
-		})
-	}()
+	go DefaultGraceful.Run(func() {
+		// nothing
+	})
 
 	branch := DefaultGraceful.NewBranch("branch_1")
-	go func() {
-		branch.Run(func() {
-			time.Sleep(time.Millisecond * 500)
-		})
-	}()
+	go branch.Run(func() {
+		time.Sleep(time.Millisecond * 500)
+	})
 
+	// do something
 	// 等待两个goroutine已经运行
 	time.Sleep(time.Millisecond * 100)
 
